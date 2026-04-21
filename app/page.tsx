@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 type Club = {
   club: string;
@@ -8,6 +9,7 @@ type Club = {
 };
 
 type Round = {
+  id: string;
   date: string;
   score: number;
   penalties: number;
@@ -17,6 +19,7 @@ type Round = {
 };
 
 type Player = {
+  id: string;
   name: string;
   freeThrowClub: string;
   clubs: Club[];
@@ -25,21 +28,6 @@ type Player = {
 
 type Tab = "philosophy" | "player" | "dashboard" | "parent";
 
-const defaultPlayers: Player[] = [
-  {
-    name: "Player 1",
-    freeThrowClub: "PW",
-    clubs: [
-      { club: "3 Wood", distance: 180 },
-      { club: "Hybrid", distance: 150 },
-      { club: "7 Iron", distance: 110 },
-      { club: "PW", distance: 80 },
-      { club: "SW", distance: 60 },
-    ],
-    rounds: [],
-  },
-];
-
 function average(numbers: number[]) {
   if (numbers.length === 0) return 0;
   return Math.round(
@@ -47,153 +35,200 @@ function average(numbers: number[]) {
   ) / 10;
 }
 
-function normalizePlayers(data: unknown): Player[] {
-  if (!Array.isArray(data)) return defaultPlayers;
-
-  return data.map((player: any) => ({
-    name: player?.name ?? "Player",
-    freeThrowClub: player?.freeThrowClub ?? "PW",
-    clubs: Array.isArray(player?.clubs)
-      ? player.clubs.map((club: any) => ({
-          club: club?.club ?? "Club",
-          distance: Number(club?.distance ?? 0),
-        }))
-      : [
-          { club: "3 Wood", distance: 0 },
-          { club: "Hybrid", distance: 0 },
-          { club: "7 Iron", distance: 0 },
-          { club: "PW", distance: 0 },
-          { club: "SW", distance: 0 },
-        ],
-    rounds: Array.isArray(player?.rounds)
-      ? player.rounds.map((round: any) => ({
-          date: round?.date ?? new Date().toISOString().slice(0, 10),
-          score: Number(round?.score ?? 0),
-          penalties: Number(round?.penalties ?? 0),
-          threePutts: Number(round?.threePutts ?? 0),
-          doubles: Number(round?.doubles ?? 0),
-          notes: round?.notes ?? "",
-        }))
-      : [],
-  }));
-}
-
 export default function Home() {
-  const [players, setPlayers] = useState<Player[]>(defaultPlayers);
+  const [players, setPlayers] = useState<Player[]>([]);
   const [selectedPlayerIndex, setSelectedPlayerIndex] = useState(0);
-  const [isLoaded, setIsLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("player");
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const savedPlayers = localStorage.getItem("golf-team-players");
-    const savedIndex = localStorage.getItem("golf-team-selected-player");
-    const savedTab = localStorage.getItem("golf-team-active-tab");
+  const loadPlayers = async () => {
+    setLoading(true);
 
-    if (savedPlayers) {
-      try {
-        setPlayers(normalizePlayers(JSON.parse(savedPlayers)));
-      } catch {
-        setPlayers(defaultPlayers);
-      }
+    const { data: playersData, error: playersError } = await supabase
+      .from("players")
+      .select("*")
+      .order("name");
+
+    if (playersError) {
+      console.error("Error loading players:", playersError);
+      setLoading(false);
+      return;
     }
 
-    if (savedIndex) {
-      const parsedIndex = Number(savedIndex);
-      if (!Number.isNaN(parsedIndex)) {
-        setSelectedPlayerIndex(parsedIndex);
-      }
+    const { data: roundsData, error: roundsError } = await supabase
+      .from("rounds")
+      .select("*")
+      .order("date", { ascending: false });
+
+    if (roundsError) {
+      console.error("Error loading rounds:", roundsError);
+      setLoading(false);
+      return;
     }
 
-    if (
-      savedTab === "philosophy" ||
-      savedTab === "player" ||
-      savedTab === "dashboard" ||
-      savedTab === "parent"
-    ) {
-      setActiveTab(savedTab);
-    }
+    const mappedPlayers: Player[] = (playersData || []).map((player: any) => ({
+      id: player.id,
+      name: player.name ?? "Player",
+      freeThrowClub: player.free_throw_club ?? "PW",
+      clubs: Array.isArray(player.clubs)
+        ? player.clubs
+        : [
+            { club: "3 Wood", distance: 0 },
+            { club: "Hybrid", distance: 0 },
+            { club: "7 Iron", distance: 0 },
+            { club: "PW", distance: 0 },
+            { club: "SW", distance: 0 },
+          ],
+      rounds: (roundsData || [])
+        .filter((round: any) => round.player_id === player.id)
+        .map((round: any) => ({
+          id: round.id,
+          date: round.date,
+          score: round.score ?? 0,
+          penalties: round.penalties ?? 0,
+          threePutts: round.three_putts ?? 0,
+          doubles: round.doubles ?? 0,
+          notes: round.notes ?? "",
+        })),
+    }));
 
-    setIsLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-
-    localStorage.setItem("golf-team-players", JSON.stringify(players));
-    localStorage.setItem(
-      "golf-team-selected-player",
-      selectedPlayerIndex.toString()
+    setPlayers(mappedPlayers);
+    setSelectedPlayerIndex((current) =>
+      mappedPlayers.length === 0 ? 0 : Math.min(current, mappedPlayers.length - 1)
     );
-    localStorage.setItem("golf-team-active-tab", activeTab);
-  }, [players, selectedPlayerIndex, activeTab, isLoaded]);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadPlayers();
+  }, []);
 
   const selectedPlayer = players[selectedPlayerIndex];
 
-  const addPlayer = () => {
-    const updatedPlayers = [
-      ...players,
-      {
-        name: `Player ${players.length + 1}`,
-        freeThrowClub: "PW",
-        clubs: [
-          { club: "3 Wood", distance: 0 },
-          { club: "Hybrid", distance: 0 },
-          { club: "7 Iron", distance: 0 },
-          { club: "PW", distance: 0 },
-          { club: "SW", distance: 0 },
-        ],
-        rounds: [],
-      },
-    ];
+  const addPlayer = async () => {
+    const newPlayer = {
+      name: `Player ${players.length + 1}`,
+      free_throw_club: "PW",
+      clubs: [
+        { club: "3 Wood", distance: 0 },
+        { club: "Hybrid", distance: 0 },
+        { club: "7 Iron", distance: 0 },
+        { club: "PW", distance: 0 },
+        { club: "SW", distance: 0 },
+      ],
+    };
 
-    setPlayers(updatedPlayers);
-    setSelectedPlayerIndex(updatedPlayers.length - 1);
+    const { error } = await supabase.from("players").insert(newPlayer);
+
+    if (error) {
+      console.error("Error adding player:", error);
+      return;
+    }
+
+    await loadPlayers();
     setActiveTab("player");
   };
 
-  const updatePlayerName = (value: string) => {
-    const updated = [...players];
-    updated[selectedPlayerIndex].name = value;
-    setPlayers(updated);
+  const updatePlayerField = async (
+    field: "name" | "free_throw_club" | "clubs",
+    value: string | Club[]
+  ) => {
+    if (!selectedPlayer) return;
+
+    const { error } = await supabase
+      .from("players")
+      .update({ [field]: value })
+      .eq("id", selectedPlayer.id);
+
+    if (error) {
+      console.error("Error updating player:", error);
+      return;
+    }
+
+    await loadPlayers();
   };
 
-  const updateFreeThrowClub = (value: string) => {
-    const updated = [...players];
-    updated[selectedPlayerIndex].freeThrowClub = value;
-    setPlayers(updated);
+  const updatePlayerName = async (value: string) => {
+    await updatePlayerField("name", value);
   };
 
-  const updateClubDistance = (clubIndex: number, value: number) => {
-    const updated = [...players];
-    updated[selectedPlayerIndex].clubs[clubIndex].distance = value;
-    setPlayers(updated);
+  const updateFreeThrowClub = async (value: string) => {
+    await updatePlayerField("free_throw_club", value);
   };
 
-  const addRound = () => {
-    const updated = [...players];
-    updated[selectedPlayerIndex].rounds.push({
+  const updateClubDistance = async (clubIndex: number, value: number) => {
+    if (!selectedPlayer) return;
+
+    const updatedClubs = [...selectedPlayer.clubs];
+    updatedClubs[clubIndex] = {
+      ...updatedClubs[clubIndex],
+      distance: value,
+    };
+
+    await updatePlayerField("clubs", updatedClubs);
+  };
+
+  const addRound = async () => {
+    if (!selectedPlayer) return;
+
+    const { error } = await supabase.from("rounds").insert({
+      player_id: selectedPlayer.id,
       date: new Date().toISOString().slice(0, 10),
       score: 0,
       penalties: 0,
-      threePutts: 0,
+      three_putts: 0,
       doubles: 0,
       notes: "",
     });
-    setPlayers(updated);
+
+    if (error) {
+      console.error("Error adding round:", error);
+      return;
+    }
+
+    await loadPlayers();
   };
 
-  const updateRoundField = (
-    roundIndex: number,
-    field: keyof Round,
+  const updateRoundField = async (
+    roundId: string,
+    field: "date" | "score" | "penalties" | "three_putts" | "doubles" | "notes",
     value: string | number
   ) => {
-    const updated = [...players];
-    updated[selectedPlayerIndex].rounds[roundIndex] = {
-      ...updated[selectedPlayerIndex].rounds[roundIndex],
-      [field]: value,
-    };
-    setPlayers(updated);
+    const { error } = await supabase
+      .from("rounds")
+      .update({ [field]: value })
+      .eq("id", roundId);
+
+    if (error) {
+      console.error("Error updating round:", error);
+      return;
+    }
+
+    await loadPlayers();
   };
+
+  if (loading) {
+    return (
+      <main style={styles.page}>
+        <h1>Golf Team App</h1>
+        <p>Loading shared data...</p>
+      </main>
+    );
+  }
+
+  if (!selectedPlayer && players.length === 0) {
+    return (
+      <main style={styles.page}>
+        <div style={styles.hero}>
+          <h1 style={styles.heroTitle}>Golf Team App</h1>
+          <p style={styles.heroText}>No players yet. Add your first player.</p>
+        </div>
+        <button onClick={addPlayer} style={styles.button}>
+          Add First Player
+        </button>
+      </main>
+    );
+  }
 
   if (!selectedPlayer) {
     return (
@@ -287,7 +322,7 @@ export default function Home() {
                 style={styles.input}
               >
                 {players.map((player, index) => (
-                  <option key={index} value={index}>
+                  <option key={player.id} value={index}>
                     {player.name}
                   </option>
                 ))}
@@ -343,15 +378,15 @@ export default function Home() {
 
             {selectedPlayer.rounds.length === 0 && <p>No rounds added yet.</p>}
 
-            {selectedPlayer.rounds.map((round, index) => (
-              <div key={index} style={styles.roundCard}>
+            {selectedPlayer.rounds.map((round) => (
+              <div key={round.id} style={styles.roundCard}>
                 <div style={styles.field}>
                   <label>Date</label>
                   <input
                     type="date"
                     value={round.date}
                     onChange={(e) =>
-                      updateRoundField(index, "date", e.target.value)
+                      updateRoundField(round.id, "date", e.target.value)
                     }
                     style={styles.input}
                   />
@@ -363,7 +398,7 @@ export default function Home() {
                     type="number"
                     value={round.score}
                     onChange={(e) =>
-                      updateRoundField(index, "score", Number(e.target.value))
+                      updateRoundField(round.id, "score", Number(e.target.value))
                     }
                     style={styles.input}
                   />
@@ -375,7 +410,7 @@ export default function Home() {
                     type="number"
                     value={round.penalties}
                     onChange={(e) =>
-                      updateRoundField(index, "penalties", Number(e.target.value))
+                      updateRoundField(round.id, "penalties", Number(e.target.value))
                     }
                     style={styles.input}
                   />
@@ -387,7 +422,7 @@ export default function Home() {
                     type="number"
                     value={round.threePutts}
                     onChange={(e) =>
-                      updateRoundField(index, "threePutts", Number(e.target.value))
+                      updateRoundField(round.id, "three_putts", Number(e.target.value))
                     }
                     style={styles.input}
                   />
@@ -399,7 +434,7 @@ export default function Home() {
                     type="number"
                     value={round.doubles}
                     onChange={(e) =>
-                      updateRoundField(index, "doubles", Number(e.target.value))
+                      updateRoundField(round.id, "doubles", Number(e.target.value))
                     }
                     style={styles.input}
                   />
@@ -411,7 +446,7 @@ export default function Home() {
                     type="text"
                     value={round.notes}
                     onChange={(e) =>
-                      updateRoundField(index, "notes", e.target.value)
+                      updateRoundField(round.id, "notes", e.target.value)
                     }
                     style={styles.input}
                   />
@@ -422,27 +457,12 @@ export default function Home() {
 
           <div style={styles.card}>
             <h3>Current Player Summary</h3>
-            <p>
-              <strong>Name:</strong> {selectedPlayer.name}
-            </p>
-            <p>
-              <strong>Free Throw Club:</strong> {selectedPlayer.freeThrowClub}
-            </p>
-            <p>
-              <strong>Rounds Logged:</strong> {selectedPlayer.rounds.length}
-            </p>
-            <p>
-              <strong>Average Score:</strong>{" "}
-              {average(selectedPlayer.rounds.map((r) => r.score))}
-            </p>
-            <p>
-              <strong>Avg Penalties:</strong>{" "}
-              {average(selectedPlayer.rounds.map((r) => r.penalties))}
-            </p>
-            <p>
-              <strong>Avg 3-Putts:</strong>{" "}
-              {average(selectedPlayer.rounds.map((r) => r.threePutts))}
-            </p>
+            <p><strong>Name:</strong> {selectedPlayer.name}</p>
+            <p><strong>Free Throw Club:</strong> {selectedPlayer.freeThrowClub}</p>
+            <p><strong>Rounds Logged:</strong> {selectedPlayer.rounds.length}</p>
+            <p><strong>Average Score:</strong> {average(selectedPlayer.rounds.map((r) => r.score))}</p>
+            <p><strong>Avg Penalties:</strong> {average(selectedPlayer.rounds.map((r) => r.penalties))}</p>
+            <p><strong>Avg 3-Putts:</strong> {average(selectedPlayer.rounds.map((r) => r.threePutts))}</p>
           </div>
         </section>
       )}
@@ -451,32 +471,17 @@ export default function Home() {
         <section style={styles.section}>
           <div style={styles.card}>
             <h2>Team Dashboard</h2>
-            <p>
-              <strong>Players:</strong> {players.length}
-            </p>
+            <p><strong>Players:</strong> {players.length}</p>
           </div>
 
-          {players.map((player, index) => (
-            <div key={index} style={styles.card}>
+          {players.map((player) => (
+            <div key={player.id} style={styles.card}>
               <h3>{player.name}</h3>
-              <p>
-                <strong>Free Throw Club:</strong> {player.freeThrowClub}
-              </p>
-              <p>
-                <strong>Avg Score:</strong>{" "}
-                {average(player.rounds.map((r) => r.score))}
-              </p>
-              <p>
-                <strong>Avg Penalties:</strong>{" "}
-                {average(player.rounds.map((r) => r.penalties))}
-              </p>
-              <p>
-                <strong>Avg 3-Putts:</strong>{" "}
-                {average(player.rounds.map((r) => r.threePutts))}
-              </p>
-              <p>
-                <strong>Rounds Logged:</strong> {player.rounds.length}
-              </p>
+              <p><strong>Free Throw Club:</strong> {player.freeThrowClub}</p>
+              <p><strong>Avg Score:</strong> {average(player.rounds.map((r) => r.score))}</p>
+              <p><strong>Avg Penalties:</strong> {average(player.rounds.map((r) => r.penalties))}</p>
+              <p><strong>Avg 3-Putts:</strong> {average(player.rounds.map((r) => r.threePutts))}</p>
+              <p><strong>Rounds Logged:</strong> {player.rounds.length}</p>
             </div>
           ))}
         </section>
@@ -495,7 +500,7 @@ export default function Home() {
                 style={styles.input}
               >
                 {players.map((player, index) => (
-                  <option key={index} value={index}>
+                  <option key={player.id} value={index}>
                     {player.name}
                   </option>
                 ))}
@@ -505,24 +510,11 @@ export default function Home() {
 
           <div style={styles.card}>
             <h3>{selectedPlayer.name}</h3>
-            <p>
-              <strong>Free Throw Club:</strong> {selectedPlayer.freeThrowClub}
-            </p>
-            <p>
-              <strong>Rounds Logged:</strong> {selectedPlayer.rounds.length}
-            </p>
-            <p>
-              <strong>Average Score:</strong>{" "}
-              {average(selectedPlayer.rounds.map((r) => r.score))}
-            </p>
-            <p>
-              <strong>Avg Penalties:</strong>{" "}
-              {average(selectedPlayer.rounds.map((r) => r.penalties))}
-            </p>
-            <p>
-              <strong>Avg 3-Putts:</strong>{" "}
-              {average(selectedPlayer.rounds.map((r) => r.threePutts))}
-            </p>
+            <p><strong>Free Throw Club:</strong> {selectedPlayer.freeThrowClub}</p>
+            <p><strong>Rounds Logged:</strong> {selectedPlayer.rounds.length}</p>
+            <p><strong>Average Score:</strong> {average(selectedPlayer.rounds.map((r) => r.score))}</p>
+            <p><strong>Avg Penalties:</strong> {average(selectedPlayer.rounds.map((r) => r.penalties))}</p>
+            <p><strong>Avg 3-Putts:</strong> {average(selectedPlayer.rounds.map((r) => r.threePutts))}</p>
           </div>
 
           <div style={styles.card}>

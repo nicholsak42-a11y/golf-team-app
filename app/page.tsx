@@ -223,6 +223,44 @@ export default function Home() {
     setActiveTab("player");
   };
 
+  const deletePlayer = async () => {
+    if (!selectedPlayer) return;
+
+    const confirmed = window.confirm(
+      `Delete ${selectedPlayer.name}? This will also delete all of their rounds.`
+    );
+    if (!confirmed) return;
+
+    setErrorMessage("");
+
+    const { error: roundsError } = await supabase
+      .from("rounds")
+      .delete()
+      .eq("player_id", selectedPlayer.id);
+
+    if (roundsError) {
+      setErrorMessage(`Delete player rounds failed: ${roundsError.message}`);
+      return;
+    }
+
+    const { error: playerError } = await supabase
+      .from("players")
+      .delete()
+      .eq("id", selectedPlayer.id);
+
+    if (playerError) {
+      setErrorMessage(`Delete player failed: ${playerError.message}`);
+      return;
+    }
+
+    const remainingPlayers = players.filter(
+      (player) => player.id !== selectedPlayer.id
+    );
+    setSelectedPlayerId(remainingPlayers[0]?.id ?? "");
+
+    await loadPlayers();
+  };
+
   const updateLocalClubDistance = (clubIndex: number, value: number) => {
     const updatedClubs = [...playerForm.clubs];
     updatedClubs[clubIndex] = {
@@ -503,6 +541,7 @@ export default function Home() {
           setPlayerForm={setPlayerForm}
           roundDrafts={roundDrafts}
           addPlayer={addPlayer}
+          deletePlayer={deletePlayer}
           addClub={addClub}
           removeClub={removeClub}
           updateLocalClubName={updateLocalClubName}

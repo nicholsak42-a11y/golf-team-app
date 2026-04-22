@@ -10,6 +10,7 @@ type PlayerTabProps = {
   setPlayerForm: React.Dispatch<React.SetStateAction<PlayerForm>>;
   roundDrafts: Record<string, Round>;
   addPlayer: () => Promise<void>;
+  deletePlayer: () => Promise<void>;
   addClub: () => void;
   removeClub: (clubIndex: number) => void;
   updateLocalClubName: (clubIndex: number, value: string) => void;
@@ -36,6 +37,7 @@ export default function PlayerTab({
   setPlayerForm,
   roundDrafts,
   addPlayer,
+  deletePlayer,
   addClub,
   removeClub,
   updateLocalClubName,
@@ -108,9 +110,15 @@ export default function PlayerTab({
           </select>
         </label>
 
-        <button onClick={savePlayer} style={styles.button}>
-          Save Player
-        </button>
+        <div style={styles.fieldRow}>
+          <button onClick={savePlayer} style={styles.button}>
+            Save Player
+          </button>
+
+          <button onClick={deletePlayer} style={styles.deleteButton}>
+            Delete Player
+          </button>
+        </div>
       </div>
 
       <div style={styles.card}>

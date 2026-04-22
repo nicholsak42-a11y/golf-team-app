@@ -175,6 +175,15 @@ export const styles: { [key: string]: React.CSSProperties } = {
     fontSize: "12px",
     fontWeight: 700,
   },
+    archivedBadge: {
+    backgroundColor: "#f3f4f6",
+    color: "#4b5563",
+    borderRadius: "999px",
+    padding: "6px 10px",
+    fontSize: "12px",
+    fontWeight: 700,
+    border: "1px solid #d1d5db",
+  },
   infoGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",

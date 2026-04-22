@@ -1,3 +1,6 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import { styles } from "@/lib/styles";
 import { Player, PlayerStats } from "@/types/golf";
 
@@ -10,6 +13,16 @@ type ImprovedEntry = DashboardEntry & {
   improvement: number;
 };
 
+type SortKey =
+  | "averageScore"
+  | "recentAverageScore"
+  | "bestRound"
+  | "averagePenalties"
+  | "averageThreePutts"
+  | "averageDoubles"
+  | "roundsLogged"
+  | "name";
+
 type DashboardTabProps = {
   players: Player[];
   totalRounds: number;
@@ -19,6 +32,7 @@ type DashboardTabProps = {
   highestThreePuttPlayer: DashboardEntry | null;
   mostImprovedPlayer: ImprovedEntry | null;
   dashboardPlayers: DashboardEntry[];
+  showArchivedPlayers: boolean;
 };
 
 export default function DashboardTab({
@@ -30,7 +44,38 @@ export default function DashboardTab({
   highestThreePuttPlayer,
   mostImprovedPlayer,
   dashboardPlayers,
+  showArchivedPlayers,
 }: DashboardTabProps) {
+  const [sortKey, setSortKey] = useState<SortKey>("averageScore");
+  const [sortAscending, setSortAscending] = useState(true);
+  const [hidePlayersWithNoRounds, setHidePlayersWithNoRounds] = useState(false);
+
+  const filteredAndSortedPlayers = useMemo(() => {
+    let result = [...dashboardPlayers];
+
+    if (hidePlayersWithNoRounds) {
+      result = result.filter((entry) => entry.stats.roundsLogged > 0);
+    }
+
+    result.sort((a, b) => {
+      if (sortKey === "name") {
+        const nameCompare = a.player.name.localeCompare(b.player.name);
+        return sortAscending ? nameCompare : -nameCompare;
+      }
+
+      const aValue = a.stats[sortKey];
+      const bValue = b.stats[sortKey];
+
+      if (typeof aValue === "number" && typeof bValue === "number") {
+        return sortAscending ? aValue - bValue : bValue - aValue;
+      }
+
+      return 0;
+    });
+
+    return result;
+  }, [dashboardPlayers, hidePlayersWithNoRounds, sortAscending, sortKey]);
+
   return (
     <section style={styles.section}>
       <div style={styles.statsGrid}>
@@ -89,34 +134,92 @@ export default function DashboardTab({
       </div>
 
       <div style={styles.card}>
-        <h2>Team Dashboard</h2>
-        <p style={styles.mutedText}>
-          Players are sorted by lowest average score first.
-        </p>
-
-        {dashboardPlayers.map(({ player, stats }) => (
-          <div key={player.id} style={styles.roundCard}>
-            <div style={styles.rowBetween}>
-              <h3 style={{ margin: 0 }}>{player.name}</h3>
-              <span style={styles.badge}>{stats.trend}</span>
-            </div>
-
-            <div style={styles.infoGrid}>
-              <p>Rounds Logged: {stats.roundsLogged}</p>
-              <p>Free Throw Club: {player.freeThrowClub}</p>
-              <p>Average Score: {stats.averageScore}</p>
-              <p>Recent 3-Round Avg: {stats.recentAverageScore}</p>
-              <p>Best Round: {stats.bestRound}</p>
-              <p>Avg Penalties: {stats.averagePenalties}</p>
-              <p>Avg 3-Putts: {stats.averageThreePutts}</p>
-              <p>Avg Doubles: {stats.averageDoubles}</p>
-            </div>
-
-            <p style={styles.focusText}>
-              Focus Area: <strong>{stats.focusArea}</strong>
+        <div style={styles.rowBetween}>
+          <div>
+            <h2 style={{ margin: 0 }}>Team Dashboard</h2>
+            <p style={styles.mutedText}>
+              {showArchivedPlayers
+                ? "Showing active and archived players."
+                : "Showing active players only."}
             </p>
           </div>
-        ))}
+        </div>
+
+        <div style={styles.infoGrid}>
+          <label style={styles.field}>
+            <span>Sort By</span>
+            <select
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+              style={styles.input}
+            >
+              <option value="averageScore">Average Score</option>
+              <option value="recentAverageScore">Recent 3-Round Average</option>
+              <option value="bestRound">Best Round</option>
+              <option value="averagePenalties">Average Penalties</option>
+              <option value="averageThreePutts">Average 3-Putts</option>
+              <option value="averageDoubles">Average Doubles</option>
+              <option value="roundsLogged">Rounds Logged</option>
+              <option value="name">Name</option>
+            </select>
+          </label>
+
+          <label style={styles.field}>
+            <span>Direction</span>
+            <select
+              value={sortAscending ? "asc" : "desc"}
+              onChange={(e) => setSortAscending(e.target.value === "asc")}
+              style={styles.input}
+            >
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </select>
+          </label>
+        </div>
+
+        <div style={styles.fieldRow}>
+          <label style={styles.fieldRow}>
+            <input
+              type="checkbox"
+              checked={hidePlayersWithNoRounds}
+              onChange={(e) => setHidePlayersWithNoRounds(e.target.checked)}
+            />
+            <span>Hide players with no rounds</span>
+          </label>
+        </div>
+
+        {filteredAndSortedPlayers.length === 0 ? (
+          <p>No players match the current dashboard filters.</p>
+        ) : (
+          filteredAndSortedPlayers.map(({ player, stats }) => (
+            <div key={player.id} style={styles.roundCard}>
+              <div style={styles.rowBetween}>
+                <div style={styles.fieldRow}>
+                  <h3 style={{ margin: 0 }}>{player.name}</h3>
+                  {player.archived ? (
+                    <span style={styles.archivedBadge}>Archived</span>
+                  ) : null}
+                </div>
+                <span style={styles.badge}>{stats.trend}</span>
+              </div>
+
+              <div style={styles.infoGrid}>
+                <p>Rounds Logged: {stats.roundsLogged}</p>
+                <p>Free Throw Club: {player.freeThrowClub}</p>
+                <p>Average Score: {stats.averageScore}</p>
+                <p>Recent 3-Round Avg: {stats.recentAverageScore}</p>
+                <p>Best Round: {stats.bestRound}</p>
+                <p>Avg Penalties: {stats.averagePenalties}</p>
+                <p>Avg 3-Putts: {stats.averageThreePutts}</p>
+                <p>Avg Doubles: {stats.averageDoubles}</p>
+              </div>
+
+              <p style={styles.focusText}>
+                Focus Area: <strong>{stats.focusArea}</strong>
+              </p>
+            </div>
+          ))
+        )}
       </div>
     </section>
   );

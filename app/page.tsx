@@ -626,7 +626,7 @@ export default function Home() {
         />
       )}
 
-      {activeTab === "dashboard" && (
+            {activeTab === "dashboard" && (
         <DashboardTab
           players={visiblePlayers}
           totalRounds={totalRounds}
@@ -636,6 +636,7 @@ export default function Home() {
           highestThreePuttPlayer={highestThreePuttPlayer}
           mostImprovedPlayer={mostImprovedPlayer}
           dashboardPlayers={dashboardPlayers}
+          showArchivedPlayers={showArchivedPlayers}
         />
       )}
 

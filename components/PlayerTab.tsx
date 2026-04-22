@@ -11,6 +11,7 @@ type PlayerTabProps = {
   roundDrafts: Record<string, Round>;
   addPlayer: () => Promise<void>;
   deletePlayer: () => Promise<void>;
+  toggleArchivePlayer: () => Promise<void>;
   addClub: () => void;
   removeClub: (clubIndex: number) => void;
   updateLocalClubName: (clubIndex: number, value: string) => void;
@@ -38,6 +39,7 @@ export default function PlayerTab({
   roundDrafts,
   addPlayer,
   deletePlayer,
+  toggleArchivePlayer,
   addClub,
   removeClub,
   updateLocalClubName,
@@ -70,6 +72,7 @@ export default function PlayerTab({
             {players.map((player) => (
               <option key={player.id} value={player.id}>
                 {player.name}
+                {player.archived ? " (Archived)" : ""}
               </option>
             ))}
           </select>
@@ -113,6 +116,10 @@ export default function PlayerTab({
         <div style={styles.fieldRow}>
           <button onClick={savePlayer} style={styles.button}>
             Save Player
+          </button>
+
+          <button onClick={toggleArchivePlayer} style={styles.secondaryButton}>
+            {selectedPlayer.archived ? "Unarchive Player" : "Archive Player"}
           </button>
 
           <button onClick={deletePlayer} style={styles.deleteButton}>
@@ -279,6 +286,7 @@ export default function PlayerTab({
       <div style={styles.card}>
         <h3>Current Player Summary</h3>
         <p>Name: {selectedPlayer.name}</p>
+        <p>Status: {selectedPlayer.archived ? "Archived" : "Active"}</p>
         <p>Free Throw Club: {selectedPlayer.freeThrowClub}</p>
         <p>Rounds Logged: {selectedPlayerStats?.roundsLogged ?? 0}</p>
         <p>Average Score: {selectedPlayerStats?.averageScore ?? 0}</p>

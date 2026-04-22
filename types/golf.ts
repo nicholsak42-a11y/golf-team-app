@@ -19,6 +19,7 @@ export type Player = {
   freeThrowClub: string;
   clubs: Club[];
   rounds: Round[];
+  archived: boolean;
 };
 
 export type Tab = "philosophy" | "player" | "dashboard" | "parent";

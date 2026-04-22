@@ -17,6 +17,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("player");
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [showArchivedPlayers, setShowArchivedPlayers] = useState(false);
 
   const [playerForm, setPlayerForm] = useState<PlayerForm>({
     name: "",
@@ -64,6 +65,7 @@ export default function Home() {
         name: player.name ?? "Player",
         freeThrowClub,
         clubs,
+        archived: Boolean(player.archived),
         rounds: (roundsData || [])
           .filter((round: any) => String(round.player_id) === String(player.id))
           .map((round: any) => ({
@@ -79,13 +81,6 @@ export default function Home() {
     });
 
     setPlayers(mappedPlayers);
-
-    setSelectedPlayerId((current) => {
-      if (mappedPlayers.length === 0) return "";
-      const stillExists = mappedPlayers.some((player) => player.id === current);
-      return stillExists ? current : mappedPlayers[0].id;
-    });
-
     setLoading(false);
   };
 
@@ -93,17 +88,34 @@ export default function Home() {
     loadPlayers();
   }, []);
 
+  const visiblePlayers = useMemo(() => {
+    return showArchivedPlayers
+      ? players
+      : players.filter((player) => !player.archived);
+  }, [players, showArchivedPlayers]);
+
+  useEffect(() => {
+    if (visiblePlayers.length === 0) {
+      setSelectedPlayerId("");
+      return;
+    }
+
+    const stillVisible = visiblePlayers.some(
+      (player) => player.id === selectedPlayerId
+    );
+
+    if (!stillVisible) {
+      setSelectedPlayerId(visiblePlayers[0].id);
+    }
+  }, [visiblePlayers, selectedPlayerId]);
+
   const selectedPlayer =
-    players.find((player) => player.id === selectedPlayerId) ??
-    players[0] ??
+    visiblePlayers.find((player) => player.id === selectedPlayerId) ??
+    visiblePlayers[0] ??
     null;
 
   useEffect(() => {
     if (!selectedPlayer) return;
-
-    if (selectedPlayerId !== selectedPlayer.id) {
-      setSelectedPlayerId(selectedPlayer.id);
-    }
 
     setPlayerForm({
       name: selectedPlayer.name,
@@ -117,14 +129,14 @@ export default function Home() {
       drafts[round.id] = { ...round };
     });
     setRoundDrafts(drafts);
-  }, [selectedPlayer, selectedPlayerId]);
+  }, [selectedPlayer]);
 
   const selectedPlayerStats = selectedPlayer
     ? getPlayerStats(selectedPlayer)
     : null;
 
   const dashboardPlayers = useMemo(() => {
-    return [...players]
+    return [...visiblePlayers]
       .map((player) => ({
         player,
         stats: getPlayerStats(player),
@@ -135,9 +147,9 @@ export default function Home() {
         if (b.stats.roundsLogged === 0) return -1;
         return a.stats.averageScore - b.stats.averageScore;
       });
-  }, [players]);
+  }, [visiblePlayers]);
 
-  const totalRounds = players.reduce(
+  const totalRounds = visiblePlayers.reduce(
     (total, player) => total + player.rounds.length,
     0
   );
@@ -202,6 +214,7 @@ export default function Home() {
       name: `Player ${players.length + 1}`,
       free_throw_club: starterClubs[0]?.club ?? "PW",
       clubs: starterClubs,
+      archived: false,
     };
 
     const { data, error } = await supabase
@@ -221,6 +234,41 @@ export default function Home() {
 
     await loadPlayers();
     setActiveTab("player");
+  };
+
+  const toggleArchivePlayer = async () => {
+    if (!selectedPlayer) return;
+
+    const nextArchived = !selectedPlayer.archived;
+    const actionLabel = nextArchived ? "archive" : "unarchive";
+
+    const confirmed = window.confirm(
+      `${nextArchived ? "Archive" : "Unarchive"} ${selectedPlayer.name}?`
+    );
+    if (!confirmed) return;
+
+    setErrorMessage("");
+
+    const { error } = await supabase
+      .from("players")
+      .update({ archived: nextArchived })
+      .eq("id", selectedPlayer.id);
+
+    if (error) {
+      setErrorMessage(
+        `${actionLabel.charAt(0).toUpperCase() + actionLabel.slice(1)} player failed: ${error.message}`
+      );
+      return;
+    }
+
+    await loadPlayers();
+
+    if (nextArchived && !showArchivedPlayers) {
+      const remainingActivePlayers = players.filter(
+        (player) => player.id !== selectedPlayer.id && !player.archived
+      );
+      setSelectedPlayerId(remainingActivePlayers[0]?.id ?? "");
+    }
   };
 
   const deletePlayer = async () => {
@@ -252,11 +300,6 @@ export default function Home() {
       setErrorMessage(`Delete player failed: ${playerError.message}`);
       return;
     }
-
-    const remainingPlayers = players.filter(
-      (player) => player.id !== selectedPlayer.id
-    );
-    setSelectedPlayerId(remainingPlayers[0]?.id ?? "");
 
     await loadPlayers();
   };
@@ -455,23 +498,38 @@ export default function Home() {
     );
   }
 
-  if (!selectedPlayer && players.length === 0) {
+  if (!selectedPlayer && visiblePlayers.length === 0) {
     return (
       <main style={styles.page}>
         <div style={styles.hero}>
           <h1 style={styles.heroTitle}>Golf Team App</h1>
-          <p style={styles.heroText}>No players yet. Add your first player.</p>
+          <p style={styles.heroText}>
+            {players.length === 0
+              ? "No players yet. Add your first player."
+              : "No visible players. Turn on archived players or add a new player."}
+          </p>
         </div>
 
         {errorMessage ? <div style={styles.error}>{errorMessage}</div> : null}
 
-        <div style={styles.rowBetween}>
-          <button onClick={addPlayer} style={styles.button}>
-            Add First Player
-          </button>
-          <button onClick={loadPlayers} style={styles.secondaryButton}>
-            Retry Load
-          </button>
+        <div style={styles.card}>
+          <label style={styles.fieldRow}>
+            <input
+              type="checkbox"
+              checked={showArchivedPlayers}
+              onChange={(e) => setShowArchivedPlayers(e.target.checked)}
+            />
+            <span>Show Archived Players</span>
+          </label>
+
+          <div style={styles.fieldRow}>
+            <button onClick={addPlayer} style={styles.button}>
+              Add Player
+            </button>
+            <button onClick={loadPlayers} style={styles.secondaryButton}>
+              Retry Load
+            </button>
+          </div>
         </div>
       </main>
     );
@@ -501,6 +559,17 @@ export default function Home() {
       </div>
 
       {errorMessage ? <div style={styles.error}>{errorMessage}</div> : null}
+
+      <div style={styles.card}>
+        <label style={styles.fieldRow}>
+          <input
+            type="checkbox"
+            checked={showArchivedPlayers}
+            onChange={(e) => setShowArchivedPlayers(e.target.checked)}
+          />
+          <span>Show Archived Players</span>
+        </label>
+      </div>
 
       <div style={styles.tabBar}>
         <button
@@ -533,7 +602,7 @@ export default function Home() {
 
       {activeTab === "player" && (
         <PlayerTab
-          players={players}
+          players={visiblePlayers}
           selectedPlayer={selectedPlayer}
           selectedPlayerId={selectedPlayerId}
           setSelectedPlayerId={setSelectedPlayerId}
@@ -542,6 +611,7 @@ export default function Home() {
           roundDrafts={roundDrafts}
           addPlayer={addPlayer}
           deletePlayer={deletePlayer}
+          toggleArchivePlayer={toggleArchivePlayer}
           addClub={addClub}
           removeClub={removeClub}
           updateLocalClubName={updateLocalClubName}
@@ -558,7 +628,7 @@ export default function Home() {
 
       {activeTab === "dashboard" && (
         <DashboardTab
-          players={players}
+          players={visiblePlayers}
           totalRounds={totalRounds}
           teamAverageScore={teamAverageScore}
           bestAveragePlayer={bestAveragePlayer}
@@ -571,7 +641,7 @@ export default function Home() {
 
       {activeTab === "parent" && (
         <ParentTab
-          players={players}
+          players={visiblePlayers}
           selectedPlayer={selectedPlayer}
           selectedPlayerId={selectedPlayerId}
           setSelectedPlayerId={setSelectedPlayerId}

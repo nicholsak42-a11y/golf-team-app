@@ -262,13 +262,6 @@ export default function Home() {
     }
 
     await loadPlayers();
-
-    if (nextArchived && !showArchivedPlayers) {
-      const remainingActivePlayers = players.filter(
-        (player) => player.id !== selectedPlayer.id && !player.archived
-      );
-      setSelectedPlayerId(remainingActivePlayers[0]?.id ?? "");
-    }
   };
 
   const deletePlayer = async () => {
@@ -626,7 +619,7 @@ export default function Home() {
         />
       )}
 
-            {activeTab === "dashboard" && (
+      {activeTab === "dashboard" && (
         <DashboardTab
           players={visiblePlayers}
           totalRounds={totalRounds}

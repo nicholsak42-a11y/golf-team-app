@@ -175,7 +175,7 @@ export const styles: { [key: string]: React.CSSProperties } = {
     fontSize: "12px",
     fontWeight: 700,
   },
-    archivedBadge: {
+  archivedBadge: {
     backgroundColor: "#f3f4f6",
     color: "#4b5563",
     borderRadius: "999px",

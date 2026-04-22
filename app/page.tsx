@@ -28,11 +28,46 @@ type Player = {
 
 type Tab = "philosophy" | "player" | "dashboard" | "parent";
 
+const defaultClubs: Club[] = [
+  { club: "Driver", distance: 0 },
+  { club: "3 Wood", distance: 0 },
+  { club: "5 Wood", distance: 0 },
+  { club: "4 Hybrid", distance: 0 },
+  { club: "5 Iron", distance: 0 },
+  { club: "6 Iron", distance: 0 },
+  { club: "7 Iron", distance: 0 },
+  { club: "8 Iron", distance: 0 },
+  { club: "9 Iron", distance: 0 },
+  { club: "PW", distance: 0 },
+  { club: "GW", distance: 0 },
+  { club: "SW", distance: 0 },
+  { club: "LW", distance: 0 },
+];
+
 function average(numbers: number[]) {
   if (numbers.length === 0) return 0;
   return Math.round(
     (numbers.reduce((a, b) => a + b, 0) / numbers.length) * 10
   ) / 10;
+}
+
+function sanitizeClubs(clubs: unknown): Club[] {
+  if (!Array.isArray(clubs)) {
+    return defaultClubs.map((club) => ({ ...club }));
+  }
+
+  const cleaned = clubs
+    .map((club: any) => ({
+      club: String(club?.club ?? "").trim(),
+      distance: Number(club?.distance ?? 0),
+    }))
+    .filter((club) => club.club.length > 0);
+
+  if (cleaned.length === 0) {
+    return defaultClubs.map((club) => ({ ...club }));
+  }
+
+  return cleaned;
 }
 
 export default function Home() {
@@ -42,10 +77,14 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const [playerForm, setPlayerForm] = useState({
+  const [playerForm, setPlayerForm] = useState<{
+    name: string;
+    freeThrowClub: string;
+    clubs: Club[];
+  }>({
     name: "",
     freeThrowClub: "",
-    clubs: [] as Club[],
+    clubs: [],
   });
 
   const [roundDrafts, setRoundDrafts] = useState<Record<string, Round>>({});
@@ -76,35 +115,37 @@ export default function Home() {
       return;
     }
 
-    const mappedPlayers: Player[] = (playersData || []).map((player: any) => ({
-      id: String(player.id),
-      name: player.name ?? "Player",
-      freeThrowClub: player.free_throw_club ?? "PW",
-      clubs: Array.isArray(player.clubs)
-        ? player.clubs
-        : [
-            { club: "3 Wood", distance: 0 },
-            { club: "Hybrid", distance: 0 },
-            { club: "7 Iron", distance: 0 },
-            { club: "PW", distance: 0 },
-            { club: "SW", distance: 0 },
-          ],
-      rounds: (roundsData || [])
-        .filter((round: any) => String(round.player_id) === String(player.id))
-        .map((round: any) => ({
-          id: String(round.id),
-          date: round.date,
-          score: round.score ?? 0,
-          penalties: round.penalties ?? 0,
-          threePutts: round.three_putts ?? 0,
-          doubles: round.doubles ?? 0,
-          notes: round.notes ?? "",
-        })),
-    }));
+    const mappedPlayers: Player[] = (playersData || []).map((player: any) => {
+      const clubs = sanitizeClubs(player.clubs);
+      const freeThrowClub =
+        typeof player.free_throw_club === "string" && player.free_throw_club
+          ? player.free_throw_club
+          : clubs[0]?.club ?? "PW";
+
+      return {
+        id: String(player.id),
+        name: player.name ?? "Player",
+        freeThrowClub,
+        clubs,
+        rounds: (roundsData || [])
+          .filter((round: any) => String(round.player_id) === String(player.id))
+          .map((round: any) => ({
+            id: String(round.id),
+            date: round.date,
+            score: round.score ?? 0,
+            penalties: round.penalties ?? 0,
+            threePutts: round.three_putts ?? 0,
+            doubles: round.doubles ?? 0,
+            notes: round.notes ?? "",
+          })),
+      };
+    });
 
     setPlayers(mappedPlayers);
     setSelectedPlayerIndex((current) =>
-      mappedPlayers.length === 0 ? 0 : Math.min(current, mappedPlayers.length - 1)
+      mappedPlayers.length === 0
+        ? 0
+        : Math.min(current, mappedPlayers.length - 1)
     );
     setLoading(false);
   };
@@ -120,8 +161,9 @@ export default function Home() {
 
     setPlayerForm({
       name: selectedPlayer.name,
-      freeThrowClub: selectedPlayer.freeThrowClub,
-      clubs: selectedPlayer.clubs,
+      freeThrowClub:
+        selectedPlayer.freeThrowClub || selectedPlayer.clubs[0]?.club || "",
+      clubs: selectedPlayer.clubs.map((club) => ({ ...club })),
     });
 
     const drafts: Record<string, Round> = {};
@@ -134,16 +176,12 @@ export default function Home() {
   const addPlayer = async () => {
     setErrorMessage("");
 
+    const starterClubs = defaultClubs.map((club) => ({ ...club }));
+
     const newPlayer = {
       name: `Player ${players.length + 1}`,
-      free_throw_club: "PW",
-      clubs: [
-        { club: "3 Wood", distance: 0 },
-        { club: "Hybrid", distance: 0 },
-        { club: "7 Iron", distance: 0 },
-        { club: "PW", distance: 0 },
-        { club: "SW", distance: 0 },
-      ],
+      free_throw_club: starterClubs[0]?.club ?? "PW",
+      clubs: starterClubs,
     };
 
     const { error } = await supabase.from("players").insert(newPlayer);
@@ -161,7 +199,7 @@ export default function Home() {
     const updatedClubs = [...playerForm.clubs];
     updatedClubs[clubIndex] = {
       ...updatedClubs[clubIndex],
-      distance: value,
+      distance: Number.isNaN(value) ? 0 : value,
     };
 
     setPlayerForm({
@@ -170,17 +208,62 @@ export default function Home() {
     });
   };
 
+  const updateLocalClubName = (clubIndex: number, value: string) => {
+    const updatedClubs = [...playerForm.clubs];
+    const oldName = updatedClubs[clubIndex]?.club ?? "";
+
+    updatedClubs[clubIndex] = {
+      ...updatedClubs[clubIndex],
+      club: value,
+    };
+
+    setPlayerForm((prev) => ({
+      ...prev,
+      clubs: updatedClubs,
+      freeThrowClub:
+        prev.freeThrowClub === oldName ? value : prev.freeThrowClub,
+    }));
+  };
+
+  const addClub = () => {
+    setPlayerForm((prev) => ({
+      ...prev,
+      clubs: [...prev.clubs, { club: "", distance: 0 }],
+    }));
+  };
+
+  const removeClub = (clubIndex: number) => {
+    setPlayerForm((prev) => {
+      const clubToRemove = prev.clubs[clubIndex];
+      const updatedClubs = prev.clubs.filter((_, index) => index !== clubIndex);
+
+      const nextFreeThrowClub =
+        prev.freeThrowClub === clubToRemove?.club
+          ? updatedClubs[0]?.club ?? ""
+          : prev.freeThrowClub;
+
+      return {
+        ...prev,
+        clubs: updatedClubs,
+        freeThrowClub: nextFreeThrowClub,
+      };
+    });
+  };
+
   const savePlayer = async () => {
     if (!selectedPlayer) return;
-
     setErrorMessage("");
+
+    const clubsToSave = sanitizeClubs(playerForm.clubs);
+    const freeThrowClub =
+      playerForm.freeThrowClub || clubsToSave[0]?.club || "PW";
 
     const { error } = await supabase
       .from("players")
       .update({
         name: playerForm.name,
-        free_throw_club: playerForm.freeThrowClub,
-        clubs: playerForm.clubs,
+        free_throw_club: freeThrowClub,
+        clubs: clubsToSave,
       })
       .eq("id", selectedPlayer.id);
 
@@ -192,9 +275,32 @@ export default function Home() {
     await loadPlayers();
   };
 
+  const saveYardages = async () => {
+    if (!selectedPlayer) return;
+    setErrorMessage("");
+
+    const clubsToSave = sanitizeClubs(playerForm.clubs);
+    const freeThrowClub =
+      playerForm.freeThrowClub || clubsToSave[0]?.club || "PW";
+
+    const { error } = await supabase
+      .from("players")
+      .update({
+        clubs: clubsToSave,
+        free_throw_club: freeThrowClub,
+      })
+      .eq("id", selectedPlayer.id);
+
+    if (error) {
+      setErrorMessage(`Save yardages failed: ${error.message}`);
+      return;
+    }
+
+    await loadPlayers();
+  };
+
   const addRound = async () => {
     if (!selectedPlayer) return;
-
     setErrorMessage("");
 
     const { error } = await supabase.from("rounds").insert({
@@ -255,12 +361,30 @@ export default function Home() {
     await loadPlayers();
   };
 
+  const deleteRound = async (roundId: string) => {
+    const confirmed = window.confirm("Delete this round?");
+    if (!confirmed) return;
+
+    setErrorMessage("");
+
+    const { error } = await supabase.from("rounds").delete().eq("id", roundId);
+
+    if (error) {
+      setErrorMessage(`Delete round failed: ${error.message}`);
+      return;
+    }
+
+    await loadPlayers();
+  };
+
   if (loading) {
     return (
       <main style={styles.page}>
-        <h1>Golf Team App</h1>
-        <p>Loading shared data...</p>
-        {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+        <div style={styles.hero}>
+          <h1 style={styles.heroTitle}>Golf Team App</h1>
+          <p style={styles.heroText}>Loading shared data...</p>
+        </div>
+        {errorMessage ? <div style={styles.error}>{errorMessage}</div> : null}
       </main>
     );
   }
@@ -273,15 +397,16 @@ export default function Home() {
           <p style={styles.heroText}>No players yet. Add your first player.</p>
         </div>
 
-        {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+        {errorMessage ? <div style={styles.error}>{errorMessage}</div> : null}
 
-        <button onClick={addPlayer} style={styles.button}>
-          Add First Player
-        </button>
-
-        <button onClick={loadPlayers} style={{ ...styles.button, marginTop: 12 }}>
-          Retry Load
-        </button>
+        <div style={styles.rowBetween}>
+          <button onClick={addPlayer} style={styles.button}>
+            Add First Player
+          </button>
+          <button onClick={loadPlayers} style={styles.secondaryButton}>
+            Retry Load
+          </button>
+        </div>
       </main>
     );
   }
@@ -289,9 +414,13 @@ export default function Home() {
   if (!selectedPlayer) {
     return (
       <main style={styles.page}>
-        <h1>Golf Team App</h1>
-        {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
-        <p>No player selected.</p>
+        <div style={styles.hero}>
+          <h1 style={styles.heroTitle}>Golf Team App</h1>
+        </div>
+        {errorMessage ? <div style={styles.error}>{errorMessage}</div> : null}
+        <div style={styles.card}>
+          <p>No player selected.</p>
+        </div>
       </main>
     );
   }
@@ -305,30 +434,30 @@ export default function Home() {
         </p>
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      {errorMessage ? <div style={styles.error}>{errorMessage}</div> : null}
 
       <div style={styles.tabBar}>
         <button
-          style={activeTab === "philosophy" ? styles.activeTab : styles.tab}
           onClick={() => setActiveTab("philosophy")}
+          style={activeTab === "philosophy" ? styles.activeTab : styles.tab}
         >
           Philosophy
         </button>
         <button
-          style={activeTab === "player" ? styles.activeTab : styles.tab}
           onClick={() => setActiveTab("player")}
+          style={activeTab === "player" ? styles.activeTab : styles.tab}
         >
           Player
         </button>
         <button
-          style={activeTab === "dashboard" ? styles.activeTab : styles.tab}
           onClick={() => setActiveTab("dashboard")}
+          style={activeTab === "dashboard" ? styles.activeTab : styles.tab}
         >
           Dashboard
         </button>
         <button
-          style={activeTab === "parent" ? styles.activeTab : styles.tab}
           onClick={() => setActiveTab("parent")}
+          style={activeTab === "parent" ? styles.activeTab : styles.tab}
         >
           Parent
         </button>
@@ -338,25 +467,22 @@ export default function Home() {
         <section style={styles.section}>
           <div style={styles.card}>
             <h2>Team Philosophy</h2>
-            <p>We are not chasing perfect golf. We are trying to avoid big numbers.</p>
+            <p>
+              We are not chasing perfect golf. We are trying to avoid big
+              numbers.
+            </p>
             <p>Double bogey is success. Bogey is a bonus.</p>
-          </div>
 
-          <div style={styles.card}>
             <h3>Shot Budget</h3>
             <p>Par 3: 2 shots to get near the green, then 1 chip and 2 putts.</p>
             <p>Par 4: 3 shots to get near the green, then 1 chip and 2 putts.</p>
             <p>Par 5: 4 shots to get near the green, then 1 chip and 2 putts.</p>
-          </div>
 
-          <div style={styles.card}>
             <h3>Short Game Identity</h3>
             <p>We are a chip-and-run team.</p>
             <p>Land the ball on the green and let it roll like a putt.</p>
             <p>One chip, then 2 putts.</p>
-          </div>
 
-          <div style={styles.card}>
             <h3>What We Track</h3>
             <p>Scores, penalties, 3-putts, doubles or worse, and notes.</p>
           </div>
@@ -373,8 +499,8 @@ export default function Home() {
               </button>
             </div>
 
-            <div style={styles.field}>
-              <label>Select Player</label>
+            <label style={styles.field}>
+              <span>Select Player</span>
               <select
                 value={selectedPlayerIndex}
                 onChange={(e) => setSelectedPlayerIndex(Number(e.target.value))}
@@ -386,31 +512,42 @@ export default function Home() {
                   </option>
                 ))}
               </select>
-            </div>
+            </label>
 
-            <div style={styles.field}>
-              <label>Player Name</label>
+            <label style={styles.field}>
+              <span>Player Name</span>
               <input
-                type="text"
                 value={playerForm.name}
                 onChange={(e) =>
                   setPlayerForm({ ...playerForm, name: e.target.value })
                 }
                 style={styles.input}
               />
-            </div>
+            </label>
 
-            <div style={styles.field}>
-              <label>Free Throw Club</label>
-              <input
-                type="text"
+            <label style={styles.field}>
+              <span>Free Throw Club</span>
+              <select
                 value={playerForm.freeThrowClub}
                 onChange={(e) =>
-                  setPlayerForm({ ...playerForm, freeThrowClub: e.target.value })
+                  setPlayerForm({
+                    ...playerForm,
+                    freeThrowClub: e.target.value,
+                  })
                 }
                 style={styles.input}
-              />
-            </div>
+              >
+                {playerForm.clubs.length === 0 ? (
+                  <option value="">No clubs yet</option>
+                ) : (
+                  playerForm.clubs.map((club, index) => (
+                    <option key={`${club.club}-${index}`} value={club.club}>
+                      {club.club || `Club ${index + 1}`}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
 
             <button onClick={savePlayer} style={styles.button}>
               Save Player
@@ -418,19 +555,43 @@ export default function Home() {
           </div>
 
           <div style={styles.card}>
-            <h3>Yardages</h3>
+            <div style={styles.rowBetween}>
+              <h3 style={{ margin: 0 }}>Yardages</h3>
+              <div style={styles.fieldRow}>
+                <button onClick={addClub} style={styles.secondaryButton}>
+                  Add Club
+                </button>
+                <button onClick={saveYardages} style={styles.button}>
+                  Save Yardages
+                </button>
+              </div>
+            </div>
+
             {playerForm.clubs.map((club, clubIndex) => (
-              <div key={club.club} style={styles.fieldRow}>
-                <label style={styles.clubLabel}>{club.club}</label>
+              <div key={clubIndex} style={styles.fieldRow}>
+                <input
+                  value={club.club}
+                  onChange={(e) =>
+                    updateLocalClubName(clubIndex, e.target.value)
+                  }
+                  placeholder="Club name"
+                  style={styles.input}
+                />
                 <input
                   type="number"
-                  value={playerForm.clubs[clubIndex]?.distance ?? 0}
+                  value={club.distance}
                   onChange={(e) =>
                     updateLocalClubDistance(clubIndex, Number(e.target.value))
                   }
                   style={styles.smallInput}
                 />
                 <span>yards</span>
+                <button
+                  onClick={() => removeClub(clubIndex)}
+                  style={styles.secondaryButton}
+                >
+                  Remove
+                </button>
               </div>
             ))}
           </div>
@@ -447,8 +608,8 @@ export default function Home() {
 
             {selectedPlayer.rounds.map((round) => (
               <div key={round.id} style={styles.roundCard}>
-                <div style={styles.field}>
-                  <label>Date</label>
+                <label style={styles.field}>
+                  <span>Date</span>
                   <input
                     type="date"
                     value={roundDrafts[round.id]?.date ?? round.date}
@@ -457,22 +618,26 @@ export default function Home() {
                     }
                     style={styles.input}
                   />
-                </div>
+                </label>
 
-                <div style={styles.field}>
-                  <label>Score</label>
+                <label style={styles.field}>
+                  <span>Score</span>
                   <input
                     type="number"
                     value={roundDrafts[round.id]?.score ?? round.score}
                     onChange={(e) =>
-                      updateLocalRoundField(round.id, "score", Number(e.target.value))
+                      updateLocalRoundField(
+                        round.id,
+                        "score",
+                        Number(e.target.value)
+                      )
                     }
                     style={styles.input}
                   />
-                </div>
+                </label>
 
-                <div style={styles.field}>
-                  <label>Penalties</label>
+                <label style={styles.field}>
+                  <span>Penalties</span>
                   <input
                     type="number"
                     value={roundDrafts[round.id]?.penalties ?? round.penalties}
@@ -485,13 +650,15 @@ export default function Home() {
                     }
                     style={styles.input}
                   />
-                </div>
+                </label>
 
-                <div style={styles.field}>
-                  <label>3-Putts</label>
+                <label style={styles.field}>
+                  <span>3-Putts</span>
                   <input
                     type="number"
-                    value={roundDrafts[round.id]?.threePutts ?? round.threePutts}
+                    value={
+                      roundDrafts[round.id]?.threePutts ?? round.threePutts
+                    }
                     onChange={(e) =>
                       updateLocalRoundField(
                         round.id,
@@ -501,47 +668,71 @@ export default function Home() {
                     }
                     style={styles.input}
                   />
-                </div>
+                </label>
 
-                <div style={styles.field}>
-                  <label>Doubles or Worse</label>
+                <label style={styles.field}>
+                  <span>Doubles or Worse</span>
                   <input
                     type="number"
                     value={roundDrafts[round.id]?.doubles ?? round.doubles}
                     onChange={(e) =>
-                      updateLocalRoundField(round.id, "doubles", Number(e.target.value))
+                      updateLocalRoundField(
+                        round.id,
+                        "doubles",
+                        Number(e.target.value)
+                      )
                     }
                     style={styles.input}
                   />
-                </div>
+                </label>
 
-                <div style={styles.field}>
-                  <label>Notes</label>
+                <label style={styles.field}>
+                  <span>Notes</span>
                   <input
-                    type="text"
                     value={roundDrafts[round.id]?.notes ?? round.notes}
                     onChange={(e) =>
                       updateLocalRoundField(round.id, "notes", e.target.value)
                     }
                     style={styles.input}
                   />
-                </div>
+                </label>
 
-                <button onClick={() => saveRound(round.id)} style={styles.button}>
-                  Save Round
-                </button>
+                <div style={styles.fieldRow}>
+                  <button
+                    onClick={() => saveRound(round.id)}
+                    style={styles.button}
+                  >
+                    Save Round
+                  </button>
+
+                  <button
+                    onClick={() => deleteRound(round.id)}
+                    style={styles.deleteButton}
+                  >
+                    Delete Round
+                  </button>
+                </div>
               </div>
             ))}
           </div>
 
           <div style={styles.card}>
             <h3>Current Player Summary</h3>
-            <p><strong>Name:</strong> {selectedPlayer.name}</p>
-            <p><strong>Free Throw Club:</strong> {selectedPlayer.freeThrowClub}</p>
-            <p><strong>Rounds Logged:</strong> {selectedPlayer.rounds.length}</p>
-            <p><strong>Average Score:</strong> {average(selectedPlayer.rounds.map((r) => r.score))}</p>
-            <p><strong>Avg Penalties:</strong> {average(selectedPlayer.rounds.map((r) => r.penalties))}</p>
-            <p><strong>Avg 3-Putts:</strong> {average(selectedPlayer.rounds.map((r) => r.threePutts))}</p>
+            <p>Name: {selectedPlayer.name}</p>
+            <p>Free Throw Club: {selectedPlayer.freeThrowClub}</p>
+            <p>Rounds Logged: {selectedPlayer.rounds.length}</p>
+            <p>
+              Average Score:{" "}
+              {average(selectedPlayer.rounds.map((r) => r.score))}
+            </p>
+            <p>
+              Avg Penalties:{" "}
+              {average(selectedPlayer.rounds.map((r) => r.penalties))}
+            </p>
+            <p>
+              Avg 3-Putts:{" "}
+              {average(selectedPlayer.rounds.map((r) => r.threePutts))}
+            </p>
           </div>
         </section>
       )}
@@ -550,19 +741,25 @@ export default function Home() {
         <section style={styles.section}>
           <div style={styles.card}>
             <h2>Team Dashboard</h2>
-            <p><strong>Players:</strong> {players.length}</p>
-          </div>
+            <p>Players: {players.length}</p>
 
-          {players.map((player) => (
-            <div key={player.id} style={styles.card}>
-              <h3>{player.name}</h3>
-              <p><strong>Free Throw Club:</strong> {player.freeThrowClub}</p>
-              <p><strong>Avg Score:</strong> {average(player.rounds.map((r) => r.score))}</p>
-              <p><strong>Avg Penalties:</strong> {average(player.rounds.map((r) => r.penalties))}</p>
-              <p><strong>Avg 3-Putts:</strong> {average(player.rounds.map((r) => r.threePutts))}</p>
-              <p><strong>Rounds Logged:</strong> {player.rounds.length}</p>
-            </div>
-          ))}
+            {players.map((player) => (
+              <div key={player.id} style={styles.roundCard}>
+                <h3 style={{ marginTop: 0 }}>{player.name}</h3>
+                <p>Free Throw Club: {player.freeThrowClub}</p>
+                <p>Avg Score: {average(player.rounds.map((r) => r.score))}</p>
+                <p>
+                  Avg Penalties:{" "}
+                  {average(player.rounds.map((r) => r.penalties))}
+                </p>
+                <p>
+                  Avg 3-Putts:{" "}
+                  {average(player.rounds.map((r) => r.threePutts))}
+                </p>
+                <p>Rounds Logged: {player.rounds.length}</p>
+              </div>
+            ))}
+          </div>
         </section>
       )}
 
@@ -571,8 +768,8 @@ export default function Home() {
           <div style={styles.card}>
             <h2>Parent View</h2>
 
-            <div style={styles.field}>
-              <label>Select Player</label>
+            <label style={styles.field}>
+              <span>Select Player</span>
               <select
                 value={selectedPlayerIndex}
                 onChange={(e) => setSelectedPlayerIndex(Number(e.target.value))}
@@ -584,23 +781,28 @@ export default function Home() {
                   </option>
                 ))}
               </select>
-            </div>
-          </div>
+            </label>
 
-          <div style={styles.card}>
             <h3>{selectedPlayer.name}</h3>
-            <p><strong>Free Throw Club:</strong> {selectedPlayer.freeThrowClub}</p>
-            <p><strong>Rounds Logged:</strong> {selectedPlayer.rounds.length}</p>
-            <p><strong>Average Score:</strong> {average(selectedPlayer.rounds.map((r) => r.score))}</p>
-            <p><strong>Avg Penalties:</strong> {average(selectedPlayer.rounds.map((r) => r.penalties))}</p>
-            <p><strong>Avg 3-Putts:</strong> {average(selectedPlayer.rounds.map((r) => r.threePutts))}</p>
-          </div>
+            <p>Free Throw Club: {selectedPlayer.freeThrowClub}</p>
+            <p>Rounds Logged: {selectedPlayer.rounds.length}</p>
+            <p>
+              Average Score:{" "}
+              {average(selectedPlayer.rounds.map((r) => r.score))}
+            </p>
+            <p>
+              Avg Penalties:{" "}
+              {average(selectedPlayer.rounds.map((r) => r.penalties))}
+            </p>
+            <p>
+              Avg 3-Putts:{" "}
+              {average(selectedPlayer.rounds.map((r) => r.threePutts))}
+            </p>
 
-          <div style={styles.card}>
             <h3>Yardage Summary</h3>
-            {selectedPlayer.clubs.map((club) => (
-              <p key={club.club}>
-                <strong>{club.club}:</strong> {club.distance} yards
+            {selectedPlayer.clubs.map((club, index) => (
+              <p key={`${club.club}-${index}`}>
+                {club.club}: {club.distance} yards
               </p>
             ))}
           </div>
@@ -708,6 +910,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: "16px",
     color: "black",
     backgroundColor: "white",
+    minWidth: "180px",
   },
   smallInput: {
     width: "90px",
@@ -718,12 +921,26 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: "black",
     backgroundColor: "white",
   },
-  clubLabel: {
-    minWidth: "90px",
-    fontWeight: 600,
-  },
   button: {
     backgroundColor: "#1f6b43",
+    color: "white",
+    border: "none",
+    borderRadius: "8px",
+    padding: "10px 14px",
+    cursor: "pointer",
+    fontWeight: 600,
+  },
+  secondaryButton: {
+    backgroundColor: "white",
+    color: "#1f6b43",
+    border: "1px solid #1f6b43",
+    borderRadius: "8px",
+    padding: "10px 14px",
+    cursor: "pointer",
+    fontWeight: 600,
+  },
+  deleteButton: {
+    backgroundColor: "#b91c1c",
     color: "white",
     border: "none",
     borderRadius: "8px",

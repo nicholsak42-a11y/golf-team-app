@@ -127,7 +127,7 @@ function getPlayerStats(player: Player) {
 
 export default function Home() {
   const [players, setPlayers] = useState<Player[]>([]);
-  const [selectedPlayerIndex, setSelectedPlayerIndex] = useState(0);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
   const [activeTab, setActiveTab] = useState<Tab>("player");
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
@@ -197,11 +197,13 @@ export default function Home() {
     });
 
     setPlayers(mappedPlayers);
-    setSelectedPlayerIndex((current) =>
-      mappedPlayers.length === 0
-        ? 0
-        : Math.min(current, mappedPlayers.length - 1)
-    );
+
+    setSelectedPlayerId((current) => {
+      if (mappedPlayers.length === 0) return "";
+      const stillExists = mappedPlayers.some((player) => player.id === current);
+      return stillExists ? current : mappedPlayers[0].id;
+    });
+
     setLoading(false);
   };
 
@@ -209,10 +211,15 @@ export default function Home() {
     loadPlayers();
   }, []);
 
-  const selectedPlayer = players[selectedPlayerIndex];
+  const selectedPlayer =
+    players.find((player) => player.id === selectedPlayerId) ?? players[0] ?? null;
 
   useEffect(() => {
     if (!selectedPlayer) return;
+
+    if (selectedPlayerId !== selectedPlayer.id) {
+      setSelectedPlayerId(selectedPlayer.id);
+    }
 
     setPlayerForm({
       name: selectedPlayer.name,
@@ -226,7 +233,7 @@ export default function Home() {
       drafts[round.id] = { ...round };
     });
     setRoundDrafts(drafts);
-  }, [selectedPlayer]);
+  }, [selectedPlayer, selectedPlayerId]);
 
   const selectedPlayerStats = selectedPlayer
     ? getPlayerStats(selectedPlayer)
@@ -313,11 +320,19 @@ export default function Home() {
       clubs: starterClubs,
     };
 
-    const { error } = await supabase.from("players").insert(newPlayer);
+    const { data, error } = await supabase
+      .from("players")
+      .insert(newPlayer)
+      .select("id")
+      .single();
 
     if (error) {
       setErrorMessage(`Add player failed: ${error.message}`);
       return;
+    }
+
+    if (data?.id) {
+      setSelectedPlayerId(String(data.id));
     }
 
     await loadPlayers();
@@ -631,12 +646,12 @@ export default function Home() {
             <label style={styles.field}>
               <span>Select Player</span>
               <select
-                value={selectedPlayerIndex}
-                onChange={(e) => setSelectedPlayerIndex(Number(e.target.value))}
+                value={selectedPlayer.id}
+                onChange={(e) => setSelectedPlayerId(e.target.value)}
                 style={styles.input}
               >
-                {players.map((player, index) => (
-                  <option key={player.id} value={index}>
+                {players.map((player) => (
+                  <option key={player.id} value={player.id}>
                     {player.name}
                   </option>
                 ))}
@@ -851,7 +866,10 @@ export default function Home() {
             <p>Free Throw Club: {selectedPlayer.freeThrowClub}</p>
             <p>Rounds Logged: {selectedPlayerStats?.roundsLogged ?? 0}</p>
             <p>Average Score: {selectedPlayerStats?.averageScore ?? 0}</p>
-            <p>Recent 3-Round Average: {selectedPlayerStats?.recentAverageScore ?? 0}</p>
+            <p>
+              Recent 3-Round Average:{" "}
+              {selectedPlayerStats?.recentAverageScore ?? 0}
+            </p>
             <p>Best Round: {selectedPlayerStats?.bestRound ?? 0}</p>
             <p>Avg Penalties: {selectedPlayerStats?.averagePenalties ?? 0}</p>
             <p>Avg 3-Putts: {selectedPlayerStats?.averageThreePutts ?? 0}</p>
@@ -960,12 +978,12 @@ export default function Home() {
             <label style={styles.field}>
               <span>Select Player</span>
               <select
-                value={selectedPlayerIndex}
-                onChange={(e) => setSelectedPlayerIndex(Number(e.target.value))}
+                value={selectedPlayer.id}
+                onChange={(e) => setSelectedPlayerId(e.target.value)}
                 style={styles.input}
               >
-                {players.map((player, index) => (
-                  <option key={player.id} value={index}>
+                {players.map((player) => (
+                  <option key={player.id} value={player.id}>
                     {player.name}
                   </option>
                 ))}
@@ -978,7 +996,8 @@ export default function Home() {
               <p>Rounds Logged: {selectedPlayerStats?.roundsLogged ?? 0}</p>
               <p>Average Score: {selectedPlayerStats?.averageScore ?? 0}</p>
               <p>
-                Recent 3-Round Avg: {selectedPlayerStats?.recentAverageScore ?? 0}
+                Recent 3-Round Avg:{" "}
+                {selectedPlayerStats?.recentAverageScore ?? 0}
               </p>
               <p>Best Round: {selectedPlayerStats?.bestRound ?? 0}</p>
               <p>Avg Penalties: {selectedPlayerStats?.averagePenalties ?? 0}</p>
@@ -987,7 +1006,8 @@ export default function Home() {
             </div>
 
             <p style={styles.focusText}>
-              Trend: <strong>{selectedPlayerStats?.trend ?? "Not enough data"}</strong>
+              Trend:{" "}
+              <strong>{selectedPlayerStats?.trend ?? "Not enough data"}</strong>
             </p>
             <p style={styles.focusText}>
               Focus This Week:{" "}
@@ -1010,7 +1030,10 @@ export default function Home() {
                     <p>Doubles: {round.doubles}</p>
                   </div>
                   <p>
-                    Notes: {round.notes && round.notes.trim().length > 0 ? round.notes : "None"}
+                    Notes:{" "}
+                    {round.notes && round.notes.trim().length > 0
+                      ? round.notes
+                      : "None"}
                   </p>
                 </div>
               ))

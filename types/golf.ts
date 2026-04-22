@@ -20,6 +20,8 @@ export type Player = {
   clubs: Club[];
   rounds: Round[];
   archived: boolean;
+  coachNotes: string;
+  parentNotes: string;
 };
 
 export type Tab = "philosophy" | "player" | "dashboard" | "parent";
@@ -28,6 +30,8 @@ export type PlayerForm = {
   name: string;
   freeThrowClub: string;
   clubs: Club[];
+  coachNotes: string;
+  parentNotes: string;
 };
 
 export type PlayerStats = {

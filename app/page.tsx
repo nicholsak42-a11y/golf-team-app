@@ -23,6 +23,8 @@ export default function Home() {
     name: "",
     freeThrowClub: "",
     clubs: [],
+    coachNotes: "",
+    parentNotes: "",
   });
 
   const [roundDrafts, setRoundDrafts] = useState<Record<string, Round>>({});
@@ -66,6 +68,8 @@ export default function Home() {
         freeThrowClub,
         clubs,
         archived: Boolean(player.archived),
+        coachNotes: player.coach_notes ?? "",
+        parentNotes: player.parent_notes ?? "",
         rounds: (roundsData || [])
           .filter((round: any) => String(round.player_id) === String(player.id))
           .map((round: any) => ({
@@ -122,6 +126,8 @@ export default function Home() {
       freeThrowClub:
         selectedPlayer.freeThrowClub || selectedPlayer.clubs[0]?.club || "",
       clubs: selectedPlayer.clubs.map((club) => ({ ...club })),
+      coachNotes: selectedPlayer.coachNotes ?? "",
+      parentNotes: selectedPlayer.parentNotes ?? "",
     });
 
     const drafts: Record<string, Round> = {};
@@ -215,6 +221,8 @@ export default function Home() {
       free_throw_club: starterClubs[0]?.club ?? "PW",
       clubs: starterClubs,
       archived: false,
+      coach_notes: "",
+      parent_notes: "",
     };
 
     const { data, error } = await supabase
@@ -366,6 +374,8 @@ export default function Home() {
         name: playerForm.name,
         free_throw_club: freeThrowClub,
         clubs: clubsToSave,
+        coach_notes: playerForm.coachNotes,
+        parent_notes: playerForm.parentNotes,
       })
       .eq("id", selectedPlayer.id);
 

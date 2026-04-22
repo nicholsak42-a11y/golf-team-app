@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type Club = {
@@ -47,8 +47,19 @@ const defaultClubs: Club[] = [
 function average(numbers: number[]) {
   if (numbers.length === 0) return 0;
   return Math.round(
-    (numbers.reduce((a, b) => a + b, 0) / numbers.length) * 10
+    (numbers.reduce((total, value) => total + value, 0) / numbers.length) * 10
   ) / 10;
+}
+
+function bestScore(rounds: Round[]) {
+  if (rounds.length === 0) return 0;
+  return Math.min(...rounds.map((round) => round.score));
+}
+
+function recentAverage(rounds: Round[], count = 3) {
+  if (rounds.length === 0) return 0;
+  const recentRounds = rounds.slice(0, count);
+  return average(recentRounds.map((round) => round.score));
 }
 
 function sanitizeClubs(clubs: unknown): Club[] {
@@ -68,6 +79,50 @@ function sanitizeClubs(clubs: unknown): Club[] {
   }
 
   return cleaned;
+}
+
+function getScoreTrend(rounds: Round[]) {
+  if (rounds.length < 4) return "Not enough data";
+
+  const recent = rounds.slice(0, 3);
+  const older = rounds.slice(3, 6);
+
+  if (older.length === 0) return "Not enough data";
+
+  const recentAvg = average(recent.map((round) => round.score));
+  const olderAvg = average(older.map((round) => round.score));
+
+  if (recentAvg < olderAvg) return "Improving";
+  if (recentAvg > olderAvg) return "Trending Up";
+  return "Steady";
+}
+
+function getFocusArea(rounds: Round[]) {
+  if (rounds.length === 0) return "No data yet";
+
+  const avgPenalties = average(rounds.map((round) => round.penalties));
+  const avgThreePutts = average(rounds.map((round) => round.threePutts));
+  const avgDoubles = average(rounds.map((round) => round.doubles));
+
+  const maxValue = Math.max(avgPenalties, avgThreePutts, avgDoubles);
+
+  if (maxValue === avgPenalties) return "Course management";
+  if (maxValue === avgThreePutts) return "Lag putting";
+  return "Avoiding blow-up holes";
+}
+
+function getPlayerStats(player: Player) {
+  return {
+    roundsLogged: player.rounds.length,
+    averageScore: average(player.rounds.map((round) => round.score)),
+    recentAverageScore: recentAverage(player.rounds, 3),
+    bestRound: bestScore(player.rounds),
+    averagePenalties: average(player.rounds.map((round) => round.penalties)),
+    averageThreePutts: average(player.rounds.map((round) => round.threePutts)),
+    averageDoubles: average(player.rounds.map((round) => round.doubles)),
+    trend: getScoreTrend(player.rounds),
+    focusArea: getFocusArea(player.rounds),
+  };
 }
 
 export default function Home() {
@@ -172,6 +227,80 @@ export default function Home() {
     });
     setRoundDrafts(drafts);
   }, [selectedPlayer]);
+
+  const selectedPlayerStats = selectedPlayer
+    ? getPlayerStats(selectedPlayer)
+    : null;
+
+  const dashboardPlayers = useMemo(() => {
+    return [...players]
+      .map((player) => ({
+        player,
+        stats: getPlayerStats(player),
+      }))
+      .sort((a, b) => {
+        if (a.stats.roundsLogged === 0 && b.stats.roundsLogged === 0) return 0;
+        if (a.stats.roundsLogged === 0) return 1;
+        if (b.stats.roundsLogged === 0) return -1;
+        return a.stats.averageScore - b.stats.averageScore;
+      });
+  }, [players]);
+
+  const totalRounds = players.reduce(
+    (total, player) => total + player.rounds.length,
+    0
+  );
+
+  const playersWithRounds = dashboardPlayers.filter(
+    (entry) => entry.stats.roundsLogged > 0
+  );
+
+  const teamAverageScore =
+    playersWithRounds.length > 0
+      ? average(playersWithRounds.map((entry) => entry.stats.averageScore))
+      : 0;
+
+  const bestAveragePlayer =
+    playersWithRounds.length > 0
+      ? [...playersWithRounds].sort(
+          (a, b) => a.stats.averageScore - b.stats.averageScore
+        )[0]
+      : null;
+
+  const highestPenaltyPlayer =
+    playersWithRounds.length > 0
+      ? [...playersWithRounds].sort(
+          (a, b) => b.stats.averagePenalties - a.stats.averagePenalties
+        )[0]
+      : null;
+
+  const highestThreePuttPlayer =
+    playersWithRounds.length > 0
+      ? [...playersWithRounds].sort(
+          (a, b) => b.stats.averageThreePutts - a.stats.averageThreePutts
+        )[0]
+      : null;
+
+  const mostImprovedPlayer =
+    playersWithRounds.length > 0
+      ? [...playersWithRounds]
+          .map((entry) => {
+            const recent = average(
+              entry.player.rounds.slice(0, 3).map((round) => round.score)
+            );
+            const older = average(
+              entry.player.rounds.slice(3, 6).map((round) => round.score)
+            );
+            const improvement =
+              entry.player.rounds.length >= 4 ? older - recent : -999;
+            return {
+              ...entry,
+              improvement,
+            };
+          })
+          .filter((entry) => entry.improvement > -999)
+          .sort((a, b) => b.improvement - a.improvement)[0] ?? null
+      : null;
 
   const addPlayer = async () => {
     setErrorMessage("");
@@ -720,43 +849,103 @@ export default function Home() {
             <h3>Current Player Summary</h3>
             <p>Name: {selectedPlayer.name}</p>
             <p>Free Throw Club: {selectedPlayer.freeThrowClub}</p>
-            <p>Rounds Logged: {selectedPlayer.rounds.length}</p>
-            <p>
-              Average Score:{" "}
-              {average(selectedPlayer.rounds.map((r) => r.score))}
-            </p>
-            <p>
-              Avg Penalties:{" "}
-              {average(selectedPlayer.rounds.map((r) => r.penalties))}
-            </p>
-            <p>
-              Avg 3-Putts:{" "}
-              {average(selectedPlayer.rounds.map((r) => r.threePutts))}
-            </p>
+            <p>Rounds Logged: {selectedPlayerStats?.roundsLogged ?? 0}</p>
+            <p>Average Score: {selectedPlayerStats?.averageScore ?? 0}</p>
+            <p>Recent 3-Round Average: {selectedPlayerStats?.recentAverageScore ?? 0}</p>
+            <p>Best Round: {selectedPlayerStats?.bestRound ?? 0}</p>
+            <p>Avg Penalties: {selectedPlayerStats?.averagePenalties ?? 0}</p>
+            <p>Avg 3-Putts: {selectedPlayerStats?.averageThreePutts ?? 0}</p>
+            <p>Avg Doubles or Worse: {selectedPlayerStats?.averageDoubles ?? 0}</p>
+            <p>Trend: {selectedPlayerStats?.trend ?? "Not enough data"}</p>
+            <p>Focus Area: {selectedPlayerStats?.focusArea ?? "No data yet"}</p>
           </div>
         </section>
       )}
 
       {activeTab === "dashboard" && (
         <section style={styles.section}>
+          <div style={styles.statsGrid}>
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Players</div>
+              <div style={styles.statValue}>{players.length}</div>
+            </div>
+
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Total Rounds</div>
+              <div style={styles.statValue}>{totalRounds}</div>
+            </div>
+
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Team Avg Score</div>
+              <div style={styles.statValue}>{teamAverageScore}</div>
+            </div>
+
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Best Avg Score</div>
+              <div style={styles.statValue}>
+                {bestAveragePlayer
+                  ? `${bestAveragePlayer.player.name} (${bestAveragePlayer.stats.averageScore})`
+                  : "No data"}
+              </div>
+            </div>
+
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Highest Penalties</div>
+              <div style={styles.statValue}>
+                {highestPenaltyPlayer
+                  ? `${highestPenaltyPlayer.player.name} (${highestPenaltyPlayer.stats.averagePenalties})`
+                  : "No data"}
+              </div>
+            </div>
+
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Highest 3-Putts</div>
+              <div style={styles.statValue}>
+                {highestThreePuttPlayer
+                  ? `${highestThreePuttPlayer.player.name} (${highestThreePuttPlayer.stats.averageThreePutts})`
+                  : "No data"}
+              </div>
+            </div>
+
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Most Improved</div>
+              <div style={styles.statValue}>
+                {mostImprovedPlayer
+                  ? `${mostImprovedPlayer.player.name} (+${Math.round(
+                      mostImprovedPlayer.improvement * 10
+                    ) / 10})`
+                  : "Not enough data"}
+              </div>
+            </div>
+          </div>
+
           <div style={styles.card}>
             <h2>Team Dashboard</h2>
-            <p>Players: {players.length}</p>
+            <p style={styles.mutedText}>
+              Players are sorted by lowest average score first.
+            </p>
 
-            {players.map((player) => (
+            {dashboardPlayers.map(({ player, stats }) => (
               <div key={player.id} style={styles.roundCard}>
-                <h3 style={{ marginTop: 0 }}>{player.name}</h3>
-                <p>Free Throw Club: {player.freeThrowClub}</p>
-                <p>Avg Score: {average(player.rounds.map((r) => r.score))}</p>
-                <p>
-                  Avg Penalties:{" "}
-                  {average(player.rounds.map((r) => r.penalties))}
+                <div style={styles.rowBetween}>
+                  <h3 style={{ margin: 0 }}>{player.name}</h3>
+                  <span style={styles.badge}>{stats.trend}</span>
+                </div>
+
+                <div style={styles.infoGrid}>
+                  <p>Rounds Logged: {stats.roundsLogged}</p>
+                  <p>Free Throw Club: {player.freeThrowClub}</p>
+                  <p>Average Score: {stats.averageScore}</p>
+                  <p>Recent 3-Round Avg: {stats.recentAverageScore}</p>
+                  <p>Best Round: {stats.bestRound}</p>
+                  <p>Avg Penalties: {stats.averagePenalties}</p>
+                  <p>Avg 3-Putts: {stats.averageThreePutts}</p>
+                  <p>Avg Doubles: {stats.averageDoubles}</p>
+                </div>
+
+                <p style={styles.focusText}>
+                  Focus Area: <strong>{stats.focusArea}</strong>
                 </p>
-                <p>
-                  Avg 3-Putts:{" "}
-                  {average(player.rounds.map((r) => r.threePutts))}
-                </p>
-                <p>Rounds Logged: {player.rounds.length}</p>
               </div>
             ))}
           </div>
@@ -784,21 +973,51 @@ export default function Home() {
             </label>
 
             <h3>{selectedPlayer.name}</h3>
-            <p>Free Throw Club: {selectedPlayer.freeThrowClub}</p>
-            <p>Rounds Logged: {selectedPlayer.rounds.length}</p>
-            <p>
-              Average Score:{" "}
-              {average(selectedPlayer.rounds.map((r) => r.score))}
-            </p>
-            <p>
-              Avg Penalties:{" "}
-              {average(selectedPlayer.rounds.map((r) => r.penalties))}
-            </p>
-            <p>
-              Avg 3-Putts:{" "}
-              {average(selectedPlayer.rounds.map((r) => r.threePutts))}
-            </p>
+            <div style={styles.infoGrid}>
+              <p>Free Throw Club: {selectedPlayer.freeThrowClub}</p>
+              <p>Rounds Logged: {selectedPlayerStats?.roundsLogged ?? 0}</p>
+              <p>Average Score: {selectedPlayerStats?.averageScore ?? 0}</p>
+              <p>
+                Recent 3-Round Avg: {selectedPlayerStats?.recentAverageScore ?? 0}
+              </p>
+              <p>Best Round: {selectedPlayerStats?.bestRound ?? 0}</p>
+              <p>Avg Penalties: {selectedPlayerStats?.averagePenalties ?? 0}</p>
+              <p>Avg 3-Putts: {selectedPlayerStats?.averageThreePutts ?? 0}</p>
+              <p>Avg Doubles: {selectedPlayerStats?.averageDoubles ?? 0}</p>
+            </div>
 
+            <p style={styles.focusText}>
+              Trend: <strong>{selectedPlayerStats?.trend ?? "Not enough data"}</strong>
+            </p>
+            <p style={styles.focusText}>
+              Focus This Week:{" "}
+              <strong>{selectedPlayerStats?.focusArea ?? "No data yet"}</strong>
+            </p>
+          </div>
+
+          <div style={styles.card}>
+            <h3>Recent Rounds</h3>
+            {selectedPlayer.rounds.length === 0 ? (
+              <p>No rounds recorded yet.</p>
+            ) : (
+              selectedPlayer.rounds.slice(0, 5).map((round) => (
+                <div key={round.id} style={styles.roundCard}>
+                  <div style={styles.infoGrid}>
+                    <p>Date: {round.date}</p>
+                    <p>Score: {round.score}</p>
+                    <p>Penalties: {round.penalties}</p>
+                    <p>3-Putts: {round.threePutts}</p>
+                    <p>Doubles: {round.doubles}</p>
+                  </div>
+                  <p>
+                    Notes: {round.notes && round.notes.trim().length > 0 ? round.notes : "None"}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div style={styles.card}>
             <h3>Yardage Summary</h3>
             {selectedPlayer.clubs.map((club, index) => (
               <p key={`${club.club}-${index}`}>
@@ -816,7 +1035,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   page: {
     padding: "16px",
     fontFamily: "Arial, sans-serif",
-    maxWidth: "900px",
+    maxWidth: "1000px",
     margin: "0 auto",
     backgroundColor: "#f4f7f5",
     minHeight: "100vh",
@@ -881,6 +1100,32 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: "14px",
     padding: "16px",
     boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+  },
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: "12px",
+  },
+  statCard: {
+    backgroundColor: "white",
+    color: "black",
+    borderRadius: "14px",
+    padding: "16px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+    border: "1px solid #d9e2dd",
+  },
+  statLabel: {
+    fontSize: "13px",
+    fontWeight: 700,
+    color: "#4b6355",
+    marginBottom: "8px",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  },
+  statValue: {
+    fontSize: "18px",
+    fontWeight: 700,
+    lineHeight: 1.4,
   },
   field: {
     display: "flex",
@@ -954,5 +1199,26 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: "12px",
     marginBottom: "12px",
     backgroundColor: "#fafcfa",
+  },
+  badge: {
+    backgroundColor: "#e7f3eb",
+    color: "#1f6b43",
+    borderRadius: "999px",
+    padding: "6px 10px",
+    fontSize: "12px",
+    fontWeight: 700,
+  },
+  infoGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: "8px 16px",
+  },
+  focusText: {
+    marginTop: "10px",
+    marginBottom: 0,
+  },
+  mutedText: {
+    color: "#4b6355",
+    marginTop: 0,
   },
 };

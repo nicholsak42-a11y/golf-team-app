@@ -40,9 +40,19 @@ export default function Home() {
   const [selectedPlayerIndex, setSelectedPlayerIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<Tab>("player");
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const [playerForm, setPlayerForm] = useState({
+    name: "",
+    freeThrowClub: "",
+    clubs: [] as Club[],
+  });
+
+  const [roundDrafts, setRoundDrafts] = useState<Record<string, Round>>({});
 
   const loadPlayers = async () => {
     setLoading(true);
+    setErrorMessage("");
 
     const { data: playersData, error: playersError } = await supabase
       .from("players")
@@ -50,7 +60,7 @@ export default function Home() {
       .order("name");
 
     if (playersError) {
-      console.error("Error loading players:", playersError);
+      setErrorMessage(`Load players failed: ${playersError.message}`);
       setLoading(false);
       return;
     }
@@ -61,13 +71,13 @@ export default function Home() {
       .order("date", { ascending: false });
 
     if (roundsError) {
-      console.error("Error loading rounds:", roundsError);
+      setErrorMessage(`Load rounds failed: ${roundsError.message}`);
       setLoading(false);
       return;
     }
 
     const mappedPlayers: Player[] = (playersData || []).map((player: any) => ({
-      id: player.id,
+      id: String(player.id),
       name: player.name ?? "Player",
       freeThrowClub: player.free_throw_club ?? "PW",
       clubs: Array.isArray(player.clubs)
@@ -80,9 +90,9 @@ export default function Home() {
             { club: "SW", distance: 0 },
           ],
       rounds: (roundsData || [])
-        .filter((round: any) => round.player_id === player.id)
+        .filter((round: any) => String(round.player_id) === String(player.id))
         .map((round: any) => ({
-          id: round.id,
+          id: String(round.id),
           date: round.date,
           score: round.score ?? 0,
           penalties: round.penalties ?? 0,
@@ -105,7 +115,25 @@ export default function Home() {
 
   const selectedPlayer = players[selectedPlayerIndex];
 
+  useEffect(() => {
+    if (!selectedPlayer) return;
+
+    setPlayerForm({
+      name: selectedPlayer.name,
+      freeThrowClub: selectedPlayer.freeThrowClub,
+      clubs: selectedPlayer.clubs,
+    });
+
+    const drafts: Record<string, Round> = {};
+    selectedPlayer.rounds.forEach((round) => {
+      drafts[round.id] = { ...round };
+    });
+    setRoundDrafts(drafts);
+  }, [selectedPlayer]);
+
   const addPlayer = async () => {
+    setErrorMessage("");
+
     const newPlayer = {
       name: `Player ${players.length + 1}`,
       free_throw_club: "PW",
@@ -121,7 +149,7 @@ export default function Home() {
     const { error } = await supabase.from("players").insert(newPlayer);
 
     if (error) {
-      console.error("Error adding player:", error);
+      setErrorMessage(`Add player failed: ${error.message}`);
       return;
     }
 
@@ -129,47 +157,45 @@ export default function Home() {
     setActiveTab("player");
   };
 
-  const updatePlayerField = async (
-    field: "name" | "free_throw_club" | "clubs",
-    value: string | Club[]
-  ) => {
+  const updateLocalClubDistance = (clubIndex: number, value: number) => {
+    const updatedClubs = [...playerForm.clubs];
+    updatedClubs[clubIndex] = {
+      ...updatedClubs[clubIndex],
+      distance: value,
+    };
+
+    setPlayerForm({
+      ...playerForm,
+      clubs: updatedClubs,
+    });
+  };
+
+  const savePlayer = async () => {
     if (!selectedPlayer) return;
+
+    setErrorMessage("");
 
     const { error } = await supabase
       .from("players")
-      .update({ [field]: value })
+      .update({
+        name: playerForm.name,
+        free_throw_club: playerForm.freeThrowClub,
+        clubs: playerForm.clubs,
+      })
       .eq("id", selectedPlayer.id);
 
     if (error) {
-      console.error("Error updating player:", error);
+      setErrorMessage(`Save player failed: ${error.message}`);
       return;
     }
 
     await loadPlayers();
   };
 
-  const updatePlayerName = async (value: string) => {
-    await updatePlayerField("name", value);
-  };
-
-  const updateFreeThrowClub = async (value: string) => {
-    await updatePlayerField("free_throw_club", value);
-  };
-
-  const updateClubDistance = async (clubIndex: number, value: number) => {
-    if (!selectedPlayer) return;
-
-    const updatedClubs = [...selectedPlayer.clubs];
-    updatedClubs[clubIndex] = {
-      ...updatedClubs[clubIndex],
-      distance: value,
-    };
-
-    await updatePlayerField("clubs", updatedClubs);
-  };
-
   const addRound = async () => {
     if (!selectedPlayer) return;
+
+    setErrorMessage("");
 
     const { error } = await supabase.from("rounds").insert({
       player_id: selectedPlayer.id,
@@ -182,25 +208,47 @@ export default function Home() {
     });
 
     if (error) {
-      console.error("Error adding round:", error);
+      setErrorMessage(`Add round failed: ${error.message}`);
       return;
     }
 
     await loadPlayers();
   };
 
-  const updateRoundField = async (
+  const updateLocalRoundField = (
     roundId: string,
-    field: "date" | "score" | "penalties" | "three_putts" | "doubles" | "notes",
+    field: keyof Round,
     value: string | number
   ) => {
+    setRoundDrafts((prev) => ({
+      ...prev,
+      [roundId]: {
+        ...prev[roundId],
+        [field]: value,
+      },
+    }));
+  };
+
+  const saveRound = async (roundId: string) => {
+    const round = roundDrafts[roundId];
+    if (!round) return;
+
+    setErrorMessage("");
+
     const { error } = await supabase
       .from("rounds")
-      .update({ [field]: value })
+      .update({
+        date: round.date,
+        score: round.score,
+        penalties: round.penalties,
+        three_putts: round.threePutts,
+        doubles: round.doubles,
+        notes: round.notes,
+      })
       .eq("id", roundId);
 
     if (error) {
-      console.error("Error updating round:", error);
+      setErrorMessage(`Save round failed: ${error.message}`);
       return;
     }
 
@@ -212,6 +260,7 @@ export default function Home() {
       <main style={styles.page}>
         <h1>Golf Team App</h1>
         <p>Loading shared data...</p>
+        {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
       </main>
     );
   }
@@ -223,8 +272,15 @@ export default function Home() {
           <h1 style={styles.heroTitle}>Golf Team App</h1>
           <p style={styles.heroText}>No players yet. Add your first player.</p>
         </div>
+
+        {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+
         <button onClick={addPlayer} style={styles.button}>
           Add First Player
+        </button>
+
+        <button onClick={loadPlayers} style={{ ...styles.button, marginTop: 12 }}>
+          Retry Load
         </button>
       </main>
     );
@@ -234,6 +290,7 @@ export default function Home() {
     return (
       <main style={styles.page}>
         <h1>Golf Team App</h1>
+        {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
         <p>No player selected.</p>
       </main>
     );
@@ -247,6 +304,8 @@ export default function Home() {
           Simple, repeatable scoring for players, coach, and parents.
         </p>
       </div>
+
+      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
 
       <div style={styles.tabBar}>
         <button
@@ -333,8 +392,10 @@ export default function Home() {
               <label>Player Name</label>
               <input
                 type="text"
-                value={selectedPlayer.name}
-                onChange={(e) => updatePlayerName(e.target.value)}
+                value={playerForm.name}
+                onChange={(e) =>
+                  setPlayerForm({ ...playerForm, name: e.target.value })
+                }
                 style={styles.input}
               />
             </div>
@@ -343,23 +404,29 @@ export default function Home() {
               <label>Free Throw Club</label>
               <input
                 type="text"
-                value={selectedPlayer.freeThrowClub}
-                onChange={(e) => updateFreeThrowClub(e.target.value)}
+                value={playerForm.freeThrowClub}
+                onChange={(e) =>
+                  setPlayerForm({ ...playerForm, freeThrowClub: e.target.value })
+                }
                 style={styles.input}
               />
             </div>
+
+            <button onClick={savePlayer} style={styles.button}>
+              Save Player
+            </button>
           </div>
 
           <div style={styles.card}>
             <h3>Yardages</h3>
-            {selectedPlayer.clubs.map((club, clubIndex) => (
+            {playerForm.clubs.map((club, clubIndex) => (
               <div key={club.club} style={styles.fieldRow}>
                 <label style={styles.clubLabel}>{club.club}</label>
                 <input
                   type="number"
-                  value={club.distance}
+                  value={playerForm.clubs[clubIndex]?.distance ?? 0}
                   onChange={(e) =>
-                    updateClubDistance(clubIndex, Number(e.target.value))
+                    updateLocalClubDistance(clubIndex, Number(e.target.value))
                   }
                   style={styles.smallInput}
                 />
@@ -384,9 +451,9 @@ export default function Home() {
                   <label>Date</label>
                   <input
                     type="date"
-                    value={round.date}
+                    value={roundDrafts[round.id]?.date ?? round.date}
                     onChange={(e) =>
-                      updateRoundField(round.id, "date", e.target.value)
+                      updateLocalRoundField(round.id, "date", e.target.value)
                     }
                     style={styles.input}
                   />
@@ -396,9 +463,9 @@ export default function Home() {
                   <label>Score</label>
                   <input
                     type="number"
-                    value={round.score}
+                    value={roundDrafts[round.id]?.score ?? round.score}
                     onChange={(e) =>
-                      updateRoundField(round.id, "score", Number(e.target.value))
+                      updateLocalRoundField(round.id, "score", Number(e.target.value))
                     }
                     style={styles.input}
                   />
@@ -408,9 +475,13 @@ export default function Home() {
                   <label>Penalties</label>
                   <input
                     type="number"
-                    value={round.penalties}
+                    value={roundDrafts[round.id]?.penalties ?? round.penalties}
                     onChange={(e) =>
-                      updateRoundField(round.id, "penalties", Number(e.target.value))
+                      updateLocalRoundField(
+                        round.id,
+                        "penalties",
+                        Number(e.target.value)
+                      )
                     }
                     style={styles.input}
                   />
@@ -420,9 +491,13 @@ export default function Home() {
                   <label>3-Putts</label>
                   <input
                     type="number"
-                    value={round.threePutts}
+                    value={roundDrafts[round.id]?.threePutts ?? round.threePutts}
                     onChange={(e) =>
-                      updateRoundField(round.id, "three_putts", Number(e.target.value))
+                      updateLocalRoundField(
+                        round.id,
+                        "threePutts",
+                        Number(e.target.value)
+                      )
                     }
                     style={styles.input}
                   />
@@ -432,9 +507,9 @@ export default function Home() {
                   <label>Doubles or Worse</label>
                   <input
                     type="number"
-                    value={round.doubles}
+                    value={roundDrafts[round.id]?.doubles ?? round.doubles}
                     onChange={(e) =>
-                      updateRoundField(round.id, "doubles", Number(e.target.value))
+                      updateLocalRoundField(round.id, "doubles", Number(e.target.value))
                     }
                     style={styles.input}
                   />
@@ -444,13 +519,17 @@ export default function Home() {
                   <label>Notes</label>
                   <input
                     type="text"
-                    value={round.notes}
+                    value={roundDrafts[round.id]?.notes ?? round.notes}
                     onChange={(e) =>
-                      updateRoundField(round.id, "notes", e.target.value)
+                      updateLocalRoundField(round.id, "notes", e.target.value)
                     }
                     style={styles.input}
                   />
                 </div>
+
+                <button onClick={() => saveRound(round.id)} style={styles.button}>
+                  Save Round
+                </button>
               </div>
             ))}
           </div>
@@ -556,6 +635,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginTop: "8px",
     marginBottom: 0,
     lineHeight: 1.5,
+  },
+  error: {
+    backgroundColor: "#fee2e2",
+    color: "#991b1b",
+    padding: "12px",
+    borderRadius: "10px",
+    marginBottom: "16px",
+    fontWeight: 600,
   },
   tabBar: {
     display: "grid",

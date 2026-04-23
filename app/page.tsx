@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import BagTab from "@/components/BagTab";
 import DashboardTab from "@/components/DashboardTab";
 import ParentTab from "@/components/ParentTab";
 import PhilosophyTab from "@/components/PhilosophyTab";
@@ -9,10 +10,11 @@ import { defaultClubs } from "@/lib/defaultClubs";
 import { average, getPlayerStats, sanitizeClubs } from "@/lib/playerStats";
 import { styles } from "@/lib/styles";
 import { supabase } from "@/lib/supabase";
-import { Player, PlayerForm, Round, Tab } from "@/types/golf";
+import { Player, PlayerForm, Round, Tab, YardageLog } from "@/types/golf";
 
 export default function Home() {
   const [players, setPlayers] = useState<Player[]>([]);
+  const [yardageLogs, setYardageLogs] = useState<YardageLog[]>([]);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
   const [activeTab, setActiveTab] = useState<Tab>("player");
   const [loading, setLoading] = useState(true);
@@ -56,6 +58,17 @@ export default function Home() {
       return;
     }
 
+    const { data: yardageLogsData, error: yardageLogsError } = await supabase
+      .from("yardage_logs")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (yardageLogsError) {
+      setErrorMessage(`Load yardage logs failed: ${yardageLogsError.message}`);
+      setLoading(false);
+      return;
+    }
+
     const mappedPlayers: Player[] = (playersData || []).map((player: any) => {
       const clubs = sanitizeClubs(player.clubs);
       const freeThrowClub =
@@ -85,7 +98,16 @@ export default function Home() {
       };
     });
 
+    const mappedLogs: YardageLog[] = (yardageLogsData || []).map((log: any) => ({
+      id: String(log.id),
+      playerId: String(log.player_id),
+      club: log.club ?? "",
+      distance: Number(log.distance ?? 0),
+      createdAt: log.created_at,
+    }));
+
     setPlayers(mappedPlayers);
+    setYardageLogs(mappedLogs);
     setLoading(false);
   };
 
@@ -118,6 +140,11 @@ export default function Home() {
     visiblePlayers.find((player) => player.id === selectedPlayerId) ??
     visiblePlayers[0] ??
     null;
+
+  const selectedPlayerYardageLogs = useMemo(() => {
+    if (!selectedPlayer) return [];
+    return yardageLogs.filter((log) => log.playerId === selectedPlayer.id);
+  }, [yardageLogs, selectedPlayer]);
 
   useEffect(() => {
     if (!selectedPlayer) return;
@@ -295,6 +322,16 @@ export default function Home() {
       return;
     }
 
+    const { error: logsError } = await supabase
+      .from("yardage_logs")
+      .delete()
+      .eq("player_id", selectedPlayer.id);
+
+    if (logsError) {
+      setErrorMessage(`Delete player yardage logs failed: ${logsError.message}`);
+      return;
+    }
+
     const { error: playerError } = await supabase
       .from("players")
       .delete()
@@ -426,6 +463,24 @@ export default function Home() {
 
     if (error) {
       setErrorMessage(`Save yardages failed: ${error.message}`);
+      return;
+    }
+
+    await loadPlayers();
+  };
+
+  const addYardageLog = async (club: string, distance: number) => {
+    if (!selectedPlayer) return;
+    setErrorMessage("");
+
+    const { error } = await supabase.from("yardage_logs").insert({
+      player_id: selectedPlayer.id,
+      club,
+      distance,
+    });
+
+    if (error) {
+      setErrorMessage(`Save shot failed: ${error.message}`);
       return;
     }
 
@@ -609,6 +664,12 @@ export default function Home() {
           Player
         </button>
         <button
+          onClick={() => setActiveTab("bag")}
+          style={activeTab === "bag" ? styles.activeTab : styles.tab}
+        >
+          Bag
+        </button>
+        <button
           onClick={() => setActiveTab("dashboard")}
           style={activeTab === "dashboard" ? styles.activeTab : styles.tab}
         >
@@ -636,17 +697,29 @@ export default function Home() {
           addPlayer={addPlayer}
           deletePlayer={deletePlayer}
           toggleArchivePlayer={toggleArchivePlayer}
-          addClub={addClub}
-          removeClub={removeClub}
-          updateLocalClubName={updateLocalClubName}
-          updateLocalClubDistance={updateLocalClubDistance}
-          savePlayer={savePlayer}
-          saveYardages={saveYardages}
           addRound={addRound}
           updateLocalRoundField={updateLocalRoundField}
           saveRound={saveRound}
           deleteRound={deleteRound}
+          savePlayer={savePlayer}
           selectedPlayerStats={selectedPlayerStats}
+        />
+      )}
+
+      {activeTab === "bag" && (
+        <BagTab
+          players={visiblePlayers}
+          selectedPlayerId={selectedPlayerId}
+          setSelectedPlayerId={setSelectedPlayerId}
+          playerForm={playerForm}
+          setPlayerForm={setPlayerForm}
+          addClub={addClub}
+          removeClub={removeClub}
+          updateLocalClubName={updateLocalClubName}
+          updateLocalClubDistance={updateLocalClubDistance}
+          saveYardages={saveYardages}
+          yardageLogs={selectedPlayerYardageLogs}
+          addYardageLog={addYardageLog}
         />
       )}
 

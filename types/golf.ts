@@ -3,6 +3,14 @@ export type Club = {
   distance: number;
 };
 
+export type YardageLog = {
+  id: string;
+  playerId: string;
+  club: string;
+  distance: number;
+  createdAt: string;
+};
+
 export type Round = {
   id: string;
   date: string;
@@ -24,7 +32,7 @@ export type Player = {
   parentNotes: string;
 };
 
-export type Tab = "philosophy" | "player" | "dashboard" | "parent";
+export type Tab = "philosophy" | "player" | "bag" | "dashboard" | "parent";
 
 export type PlayerForm = {
   name: string;

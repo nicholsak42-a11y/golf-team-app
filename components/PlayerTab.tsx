@@ -15,12 +15,6 @@ type PlayerTabProps = {
   addPlayer: () => Promise<void>;
   deletePlayer: () => Promise<void>;
   toggleArchivePlayer: () => Promise<void>;
-  addClub: () => void;
-  removeClub: (clubIndex: number) => void;
-  updateLocalClubName: (clubIndex: number, value: string) => void;
-  updateLocalClubDistance: (clubIndex: number, value: number) => void;
-  savePlayer: () => Promise<void>;
-  saveYardages: () => Promise<void>;
   addRound: () => Promise<void>;
   updateLocalRoundField: (
     roundId: string,
@@ -29,6 +23,7 @@ type PlayerTabProps = {
   ) => void;
   saveRound: (roundId: string) => Promise<void>;
   deleteRound: (roundId: string) => Promise<void>;
+  savePlayer: () => Promise<void>;
   selectedPlayerStats: PlayerStats | null;
 };
 
@@ -43,16 +38,11 @@ export default function PlayerTab({
   addPlayer,
   deletePlayer,
   toggleArchivePlayer,
-  addClub,
-  removeClub,
-  updateLocalClubName,
-  updateLocalClubDistance,
-  savePlayer,
-  saveYardages,
   addRound,
   updateLocalRoundField,
   saveRound,
   deleteRound,
+  savePlayer,
   selectedPlayerStats,
 }: PlayerTabProps) {
   const [playerSearch, setPlayerSearch] = useState("");
@@ -81,7 +71,7 @@ export default function PlayerTab({
     <section style={styles.section}>
       <div style={styles.card}>
         <div style={styles.rowBetween}>
-          <h2 style={{ margin: 0 }}>Player Tracker</h2>
+          <h2 style={{ margin: 0 }}>Player</h2>
           <button onClick={addPlayer} style={styles.button}>
             Add Player
           </button>
@@ -129,30 +119,6 @@ export default function PlayerTab({
         </label>
 
         <label style={styles.field}>
-          <span>Free Throw Club</span>
-          <select
-            value={playerForm.freeThrowClub}
-            onChange={(e) =>
-              setPlayerForm((prev) => ({
-                ...prev,
-                freeThrowClub: e.target.value,
-              }))
-            }
-            style={styles.input}
-          >
-            {playerForm.clubs.length === 0 ? (
-              <option value="">No clubs yet</option>
-            ) : (
-              playerForm.clubs.map((club, index) => (
-                <option key={`${club.club}-${index}`} value={club.club}>
-                  {club.club || `Club ${index + 1}`}
-                </option>
-              ))
-            )}
-          </select>
-        </label>
-
-        <label style={styles.field}>
           <span>Coach Notes</span>
           <textarea
             value={playerForm.coachNotes}
@@ -176,46 +142,6 @@ export default function PlayerTab({
             Delete Player
           </button>
         </div>
-      </div>
-
-      <div style={styles.card}>
-        <div style={styles.rowBetween}>
-          <h3 style={{ margin: 0 }}>Yardages</h3>
-          <div style={styles.fieldRow}>
-            <button onClick={addClub} style={styles.secondaryButton}>
-              Add Club
-            </button>
-            <button onClick={saveYardages} style={styles.button}>
-              Save Yardages
-            </button>
-          </div>
-        </div>
-
-        {playerForm.clubs.map((club, clubIndex) => (
-          <div key={clubIndex} style={styles.fieldRow}>
-            <input
-              value={club.club}
-              onChange={(e) => updateLocalClubName(clubIndex, e.target.value)}
-              placeholder="Club name"
-              style={styles.input}
-            />
-            <input
-              type="number"
-              value={club.distance}
-              onChange={(e) =>
-                updateLocalClubDistance(clubIndex, Number(e.target.value))
-              }
-              style={styles.smallInput}
-            />
-            <span>yards</span>
-            <button
-              onClick={() => removeClub(clubIndex)}
-              style={styles.secondaryButton}
-            >
-              Remove
-            </button>
-          </div>
-        ))}
       </div>
 
       <div style={styles.card}>

@@ -28,6 +28,7 @@ export default function Home() {
   });
 
   const [roundDrafts, setRoundDrafts] = useState<Record<string, Round>>({});
+  const [parentNotesDraft, setParentNotesDraft] = useState("");
 
   const loadPlayers = async () => {
     setLoading(true);
@@ -129,6 +130,8 @@ export default function Home() {
       coachNotes: selectedPlayer.coachNotes ?? "",
       parentNotes: selectedPlayer.parentNotes ?? "",
     });
+
+    setParentNotesDraft(selectedPlayer.parentNotes ?? "");
 
     const drafts: Record<string, Round> = {};
     selectedPlayer.rounds.forEach((round) => {
@@ -375,12 +378,30 @@ export default function Home() {
         free_throw_club: freeThrowClub,
         clubs: clubsToSave,
         coach_notes: playerForm.coachNotes,
-        parent_notes: playerForm.parentNotes,
       })
       .eq("id", selectedPlayer.id);
 
     if (error) {
       setErrorMessage(`Save player failed: ${error.message}`);
+      return;
+    }
+
+    await loadPlayers();
+  };
+
+  const saveParentNotes = async () => {
+    if (!selectedPlayer) return;
+    setErrorMessage("");
+
+    const { error } = await supabase
+      .from("players")
+      .update({
+        parent_notes: parentNotesDraft,
+      })
+      .eq("id", selectedPlayer.id);
+
+    if (error) {
+      setErrorMessage(`Save parent notes failed: ${error.message}`);
       return;
     }
 
@@ -650,6 +671,9 @@ export default function Home() {
           selectedPlayerId={selectedPlayerId}
           setSelectedPlayerId={setSelectedPlayerId}
           selectedPlayerStats={selectedPlayerStats}
+          parentNotesDraft={parentNotesDraft}
+          setParentNotesDraft={setParentNotesDraft}
+          saveParentNotes={saveParentNotes}
         />
       )}
     </main>

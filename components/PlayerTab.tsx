@@ -124,17 +124,6 @@ export default function PlayerTab({
           />
         </label>
 
-        <label style={styles.field}>
-          <span>Parent Notes</span>
-          <textarea
-            value={playerForm.parentNotes}
-            onChange={(e) =>
-              setPlayerForm((prev) => ({ ...prev, parentNotes: e.target.value }))
-            }
-            style={{ ...styles.input, minHeight: "110px", resize: "vertical" }}
-          />
-        </label>
-
         <div style={styles.fieldRow}>
           <button onClick={savePlayer} style={styles.button}>
             Save Player

@@ -7,6 +7,9 @@ type ParentTabProps = {
   selectedPlayerId: string;
   setSelectedPlayerId: (value: string) => void;
   selectedPlayerStats: PlayerStats | null;
+  parentNotesDraft: string;
+  setParentNotesDraft: React.Dispatch<React.SetStateAction<string>>;
+  saveParentNotes: () => Promise<void>;
 };
 
 export default function ParentTab({
@@ -15,6 +18,9 @@ export default function ParentTab({
   selectedPlayerId,
   setSelectedPlayerId,
   selectedPlayerStats,
+  parentNotesDraft,
+  setParentNotesDraft,
+  saveParentNotes,
 }: ParentTabProps) {
   return (
     <section style={styles.section}>
@@ -55,6 +61,22 @@ export default function ParentTab({
           Focus This Week:{" "}
           <strong>{selectedPlayerStats?.focusArea ?? "No data yet"}</strong>
         </p>
+      </div>
+
+      <div style={styles.card}>
+        <h3>Parent Notes</h3>
+
+        <textarea
+          value={parentNotesDraft}
+          onChange={(e) => setParentNotesDraft(e.target.value)}
+          style={{ ...styles.input, minHeight: "120px", resize: "vertical", width: "100%" }}
+        />
+
+        <div style={{ marginTop: "12px" }}>
+          <button onClick={saveParentNotes} style={styles.button}>
+            Save Parent Notes
+          </button>
+        </div>
       </div>
 
       <div style={styles.card}>

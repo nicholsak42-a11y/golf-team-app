@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { styles } from "@/lib/styles";
 import { Player, PlayerStats } from "@/types/golf";
 
@@ -35,6 +35,18 @@ export default function ParentTab({
     );
   }, [players, playerSearch]);
 
+  useEffect(() => {
+    if (filteredPlayers.length === 1 && filteredPlayers[0].id !== selectedPlayerId) {
+      setSelectedPlayerId(filteredPlayers[0].id);
+    }
+  }, [filteredPlayers, selectedPlayerId, setSelectedPlayerId]);
+
+  const selectValue = filteredPlayers.some(
+    (player) => player.id === selectedPlayerId
+  )
+    ? selectedPlayerId
+    : filteredPlayers[0]?.id ?? "";
+
   return (
     <section style={styles.section}>
       <div style={styles.card}>
@@ -53,12 +65,12 @@ export default function ParentTab({
         <label style={styles.field}>
           <span>Select Player</span>
           <select
-            value={selectedPlayerId}
+            value={selectValue}
             onChange={(e) => setSelectedPlayerId(e.target.value)}
             style={styles.input}
           >
             {filteredPlayers.length === 0 ? (
-              <option value={selectedPlayerId}>No matching players</option>
+              <option value="">No matching players</option>
             ) : (
               filteredPlayers.map((player) => (
                 <option key={player.id} value={player.id}>

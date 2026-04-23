@@ -30,9 +30,10 @@ export type Player = {
   archived: boolean;
   coachNotes: string;
   parentNotes: string;
+  user_id?: string | null;
 };
 
-export type Tab = "philosophy" | "player" | "bag" | "dashboard" | "parent";
+export type Tab = "philosophy" | "player" | "bag" | "dashboard" | "parent" | "student-links";
 
 export type PlayerForm = {
   name: string;

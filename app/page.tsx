@@ -9,10 +9,17 @@ import PlayerTab from "@/components/PlayerTab";
 import { defaultClubs } from "@/lib/defaultClubs";
 import { average, getPlayerStats, sanitizeClubs } from "@/lib/playerStats";
 import { styles } from "@/lib/styles";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase";
 import { Player, PlayerForm, Round, Tab, YardageLog } from "@/types/golf";
-
+import StudentLinksTab from "@/components/StudentLinking";
 export default function Home() {
+  const [currentUserEmail, setCurrentUserEmail] = useState("");
+  const [currentUserRole, setCurrentUserRole] = useState("");
+  const supabase = createClient();
+  const handleLogout = async () => {
+  await supabase.auth.signOut();
+  window.location.href = "/login";
+};
   const [players, setPlayers] = useState<Player[]>([]);
   const [yardageLogs, setYardageLogs] = useState<YardageLog[]>([]);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
@@ -84,6 +91,7 @@ export default function Home() {
         archived: Boolean(player.archived),
         coachNotes: player.coach_notes ?? "",
         parentNotes: player.parent_notes ?? "",
+        user_id: player.user_id ?? null,
         rounds: (roundsData || [])
           .filter((round: any) => String(round.player_id) === String(player.id))
           .map((round: any) => ({
@@ -112,9 +120,25 @@ export default function Home() {
   };
 
   useEffect(() => {
-    loadPlayers();
-  }, []);
+  const checkUser = async () => {
+    const { data, error } = await supabase.auth.getUser();
 
+    if (error || !data.user) {
+      window.location.href = "/login";
+      return;
+    }
+setCurrentUserEmail(data.user.email ?? "");
+const { data: profileData } = await supabase
+  .from("profiles")
+  .select("role")
+  .eq("id", data.user.id)
+  .single();
+    await loadPlayers();
+    setCurrentUserRole(profileData?.role ?? "");
+  };
+
+  checkUser();
+}, []);
   const visiblePlayers = useMemo(() => {
     return showArchivedPlayers
       ? players
@@ -566,28 +590,56 @@ export default function Home() {
   };
 
   if (loading) {
-    return (
-      <main style={styles.page}>
-        <div style={styles.hero}>
+  return (
+    <main style={styles.page}>
+      <div style={styles.hero}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <h1 style={styles.heroTitle}>Golf Team App</h1>
-          <p style={styles.heroText}>Loading shared data...</p>
+          <button onClick={handleLogout} style={styles.button}>
+            Log Out
+          </button>
         </div>
-        {errorMessage ? <div style={styles.error}>{errorMessage}</div> : null}
-      </main>
-    );
-  }
+        <p style={styles.heroText}>Loading shared data...</p>
+        <p style={styles.heroText}>Signed in as: {currentUserEmail}</p>
+        <p style={styles.heroText}>Role: {currentUserRole}</p>
+      </div>
+      {errorMessage ? <div style={styles.error}>{errorMessage}</div> : null}
+    </main>
+  );
+}
 
   if (!selectedPlayer && visiblePlayers.length === 0) {
-    return (
-      <main style={styles.page}>
-        <div style={styles.hero}>
+  return (
+    <main style={styles.page}>
+      <div style={styles.hero}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <h1 style={styles.heroTitle}>Golf Team App</h1>
-          <p style={styles.heroText}>
-            {players.length === 0
-              ? "No players yet. Add your first player."
-              : "No visible players. Turn on archived players or add a new player."}
-          </p>
+          <button onClick={handleLogout} style={styles.button}>
+            Log Out
+          </button>
         </div>
+
+        <p style={styles.heroText}>
+          {players.length === 0
+            ? "No players yet. Add your first player."
+            : "No visible players. Turn on archived players or add a new player."}
+        </p>
+
+        <p style={styles.heroText}>Signed in as: {currentUserEmail}</p>
+        <p style={styles.heroText}>Role: {currentUserRole}</p>
+      </div>
 
         {errorMessage ? <div style={styles.error}>{errorMessage}</div> : null}
 
@@ -602,9 +654,11 @@ export default function Home() {
           </label>
 
           <div style={styles.fieldRow}>
+            {currentUserRole === "coach" && (
             <button onClick={addPlayer} style={styles.button}>
               Add Player
             </button>
+            )}
             <button onClick={loadPlayers} style={styles.secondaryButton}>
               Retry Load
             </button>
@@ -616,15 +670,28 @@ export default function Home() {
 
   if (!selectedPlayer) {
     return (
-      <main style={styles.page}>
-        <div style={styles.hero}>
-          <h1 style={styles.heroTitle}>Golf Team App</h1>
-        </div>
-        {errorMessage ? <div style={styles.error}>{errorMessage}</div> : null}
-        <div style={styles.card}>
-          <p>No player selected.</p>
-        </div>
-      </main>
+     <main style={styles.page}>
+  <div style={styles.hero}>
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+      }}
+    >
+      <h1 style={styles.heroTitle}>Golf Team App</h1>
+      <button onClick={handleLogout} style={styles.button}>
+        Log Out
+      </button>
+    </div>
+  </div>
+
+  {errorMessage ? <div style={styles.error}>{errorMessage}</div> : null}
+
+  <div style={styles.card}>
+    <p>No player selected.</p>
+  </div>
+</main>
     );
   }
 
@@ -636,7 +703,9 @@ export default function Home() {
           Simple, repeatable scoring for players, coach, and parents.
         </p>
       </div>
-
+<button onClick={handleLogout} style={styles.button}>
+  Log Out
+</button>
       {errorMessage ? <div style={styles.error}>{errorMessage}</div> : null}
 
       <div style={styles.card}>
@@ -649,43 +718,80 @@ export default function Home() {
           <span>Show Archived Players</span>
         </label>
       </div>
+<div style={styles.tabBar}>
+  <button
+    onClick={() => setActiveTab("philosophy")}
+    style={activeTab === "philosophy" ? styles.activeTab : styles.tab}
+  >
+    Philosophy
+  </button>
 
-      <div style={styles.tabBar}>
-        <button
-          onClick={() => setActiveTab("philosophy")}
-          style={activeTab === "philosophy" ? styles.activeTab : styles.tab}
-        >
-          Philosophy
-        </button>
-        <button
-          onClick={() => setActiveTab("player")}
-          style={activeTab === "player" ? styles.activeTab : styles.tab}
-        >
-          Player
-        </button>
-        <button
-          onClick={() => setActiveTab("bag")}
-          style={activeTab === "bag" ? styles.activeTab : styles.tab}
-        >
-          Bag
-        </button>
-        <button
-          onClick={() => setActiveTab("dashboard")}
-          style={activeTab === "dashboard" ? styles.activeTab : styles.tab}
-        >
-          Dashboard
-        </button>
-        <button
-          onClick={() => setActiveTab("parent")}
-          style={activeTab === "parent" ? styles.activeTab : styles.tab}
-        >
-          Parent
-        </button>
-      </div>
+  {currentUserRole === "coach" && (
+    <>
+      <button
+        onClick={() => setActiveTab("player")}
+        style={activeTab === "player" ? styles.activeTab : styles.tab}
+      >
+        Player
+      </button>
+      <button
+        onClick={() => setActiveTab("bag")}
+        style={activeTab === "bag" ? styles.activeTab : styles.tab}
+      >
+        Bag
+      </button>
+      <button
+        onClick={() => setActiveTab("dashboard")}
+        style={activeTab === "dashboard" ? styles.activeTab : styles.tab}
+      >
+        Dashboard
+      </button>
+      <button
+        onClick={() => setActiveTab("parent")}
+        style={activeTab === "parent" ? styles.activeTab : styles.tab}
+      >
+        Parent
+      </button>
+      <button
+        onClick={() => setActiveTab("student-links")}
+        style={activeTab === "student-links" ? styles.activeTab : styles.tab}
+      >
+        Student Links
+      </button>
+    </>
+  )}
+
+  {currentUserRole === "parent" && (
+    <button
+      onClick={() => setActiveTab("parent")}
+      style={activeTab === "parent" ? styles.activeTab : styles.tab}
+    >
+      Parent
+    </button>
+  )}
+
+  {currentUserRole === "student" && (
+    <>
+      <button
+        onClick={() => setActiveTab("bag")}
+        style={activeTab === "bag" ? styles.activeTab : styles.tab}
+      >
+        Bag
+      </button>
+
+      <button
+        onClick={() => setActiveTab("dashboard")}
+        style={activeTab === "dashboard" ? styles.activeTab : styles.tab}
+      >
+        Dashboard
+      </button>
+    </>
+  )}
+</div>
 
       {activeTab === "philosophy" && <PhilosophyTab />}
 
-      {activeTab === "player" && (
+      {activeTab === "player" && currentUserRole === "coach" && (
         <PlayerTab
           players={visiblePlayers}
           selectedPlayer={selectedPlayer}
@@ -703,10 +809,11 @@ export default function Home() {
           deleteRound={deleteRound}
           savePlayer={savePlayer}
           selectedPlayerStats={selectedPlayerStats}
+          isCoach={currentUserRole === "coach"}
         />
       )}
 
-      {activeTab === "bag" && (
+      {activeTab === "bag" && currentUserRole === "coach" && (
         <BagTab
           players={visiblePlayers}
           selectedPlayerId={selectedPlayerId}
@@ -723,7 +830,7 @@ export default function Home() {
         />
       )}
 
-      {activeTab === "dashboard" && (
+      {activeTab === "dashboard" && currentUserRole === "coach" && (
         <DashboardTab
           players={visiblePlayers}
           totalRounds={totalRounds}
@@ -749,6 +856,16 @@ export default function Home() {
           saveParentNotes={saveParentNotes}
         />
       )}
+      {activeTab === "student-links" && currentUserRole === "coach" && (
+ <StudentLinksTab
+    currentUserRole={currentUserRole}
+    players={visiblePlayers.map((player) => ({
+      id: player.id,
+      name: player.name,
+      user_id: player.user_id,
+    }))}
+  />
+)}
     </main>
   );
 }

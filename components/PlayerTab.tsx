@@ -25,6 +25,7 @@ type PlayerTabProps = {
   deleteRound: (roundId: string) => Promise<void>;
   savePlayer: () => Promise<void>;
   selectedPlayerStats: PlayerStats | null;
+  isCoach: boolean;
 };
 
 export default function PlayerTab({
@@ -44,6 +45,7 @@ export default function PlayerTab({
   deleteRound,
   savePlayer,
   selectedPlayerStats,
+  isCoach,
 }: PlayerTabProps) {
   const [playerSearch, setPlayerSearch] = useState("");
 
@@ -147,11 +149,12 @@ export default function PlayerTab({
       <div style={styles.card}>
         <div style={styles.rowBetween}>
           <h3 style={{ margin: 0 }}>Round Tracker</h3>
+          {isCoach && (
           <button onClick={addRound} style={styles.button}>
             Add Round
           </button>
+          )}
         </div>
-
         {selectedPlayer.rounds.length === 0 && <p>No rounds added yet.</p>}
 
         {selectedPlayer.rounds.map((round) => (

@@ -100,6 +100,16 @@ export default function BagTab({
     setShotDistance("");
   };
 
+  const applyAverageToClub = (clubIndex: number) => {
+    const clubName = playerForm.clubs[clubIndex]?.club;
+    if (!clubName) return;
+
+    const clubStats = averagesByClub[clubName];
+    if (!clubStats) return;
+
+    updateLocalClubDistance(clubIndex, clubStats.average);
+  };
+
   return (
     <section style={styles.section}>
       <div style={styles.card}>
@@ -175,6 +185,7 @@ export default function BagTab({
 
         {playerForm.clubs.map((club, clubIndex) => {
           const clubStats = averagesByClub[club.club];
+
           return (
             <div key={clubIndex} style={styles.fieldRow}>
               <input
@@ -198,6 +209,13 @@ export default function BagTab({
               <span style={styles.mutedText}>
                 Samples: {clubStats ? clubStats.count : 0}
               </span>
+              <button
+                onClick={() => applyAverageToClub(clubIndex)}
+                style={styles.secondaryButton}
+                disabled={!clubStats}
+              >
+                Use Avg
+              </button>
               <button
                 onClick={() => removeClub(clubIndex)}
                 style={styles.secondaryButton}

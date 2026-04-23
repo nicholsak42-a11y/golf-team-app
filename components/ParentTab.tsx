@@ -1,3 +1,6 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import { styles } from "@/lib/styles";
 import { Player, PlayerStats } from "@/types/golf";
 
@@ -22,10 +25,32 @@ export default function ParentTab({
   setParentNotesDraft,
   saveParentNotes,
 }: ParentTabProps) {
+  const [playerSearch, setPlayerSearch] = useState("");
+
+  const filteredPlayers = useMemo(() => {
+    const query = playerSearch.trim().toLowerCase();
+
+    if (!query) return players;
+
+    return players.filter((player) =>
+      player.name.toLowerCase().includes(query)
+    );
+  }, [players, playerSearch]);
+
   return (
     <section style={styles.section}>
       <div style={styles.card}>
         <h2>Parent View</h2>
+
+        <label style={styles.field}>
+          <span>Search Player</span>
+          <input
+            value={playerSearch}
+            onChange={(e) => setPlayerSearch(e.target.value)}
+            placeholder="Type a player name..."
+            style={styles.input}
+          />
+        </label>
 
         <label style={styles.field}>
           <span>Select Player</span>
@@ -34,11 +59,15 @@ export default function ParentTab({
             onChange={(e) => setSelectedPlayerId(e.target.value)}
             style={styles.input}
           >
-            {players.map((player) => (
-              <option key={player.id} value={player.id}>
-                {player.name}
-              </option>
-            ))}
+            {filteredPlayers.length === 0 ? (
+              <option value={selectedPlayerId}>No matching players</option>
+            ) : (
+              filteredPlayers.map((player) => (
+                <option key={player.id} value={player.id}>
+                  {player.name}
+                </option>
+              ))
+            )}
           </select>
         </label>
 
@@ -47,7 +76,9 @@ export default function ParentTab({
           <p>Free Throw Club: {selectedPlayer.freeThrowClub}</p>
           <p>Rounds Logged: {selectedPlayerStats?.roundsLogged ?? 0}</p>
           <p>Average Score: {selectedPlayerStats?.averageScore ?? 0}</p>
-          <p>Recent 3-Round Avg: {selectedPlayerStats?.recentAverageScore ?? 0}</p>
+          <p>
+            Recent 3-Round Avg: {selectedPlayerStats?.recentAverageScore ?? 0}
+          </p>
           <p>Best Round: {selectedPlayerStats?.bestRound ?? 0}</p>
           <p>Avg Penalties: {selectedPlayerStats?.averagePenalties ?? 0}</p>
           <p>Avg 3-Putts: {selectedPlayerStats?.averageThreePutts ?? 0}</p>
@@ -69,7 +100,12 @@ export default function ParentTab({
         <textarea
           value={parentNotesDraft}
           onChange={(e) => setParentNotesDraft(e.target.value)}
-          style={{ ...styles.input, minHeight: "120px", resize: "vertical", width: "100%" }}
+          style={{
+            ...styles.input,
+            minHeight: "120px",
+            resize: "vertical",
+            width: "100%",
+          }}
         />
 
         <div style={{ marginTop: "12px" }}>

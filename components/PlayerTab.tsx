@@ -1,3 +1,6 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import { styles } from "@/lib/styles";
 import { Player, PlayerForm, PlayerStats, Round } from "@/types/golf";
 
@@ -52,6 +55,18 @@ export default function PlayerTab({
   deleteRound,
   selectedPlayerStats,
 }: PlayerTabProps) {
+  const [playerSearch, setPlayerSearch] = useState("");
+
+  const filteredPlayers = useMemo(() => {
+    const query = playerSearch.trim().toLowerCase();
+
+    if (!query) return players;
+
+    return players.filter((player) =>
+      player.name.toLowerCase().includes(query)
+    );
+  }, [players, playerSearch]);
+
   return (
     <section style={styles.section}>
       <div style={styles.card}>
@@ -63,18 +78,32 @@ export default function PlayerTab({
         </div>
 
         <label style={styles.field}>
+          <span>Search Player</span>
+          <input
+            value={playerSearch}
+            onChange={(e) => setPlayerSearch(e.target.value)}
+            placeholder="Type a player name..."
+            style={styles.input}
+          />
+        </label>
+
+        <label style={styles.field}>
           <span>Select Player</span>
           <select
             value={selectedPlayerId}
             onChange={(e) => setSelectedPlayerId(e.target.value)}
             style={styles.input}
           >
-            {players.map((player) => (
-              <option key={player.id} value={player.id}>
-                {player.name}
-                {player.archived ? " (Archived)" : ""}
-              </option>
-            ))}
+            {filteredPlayers.length === 0 ? (
+              <option value={selectedPlayerId}>No matching players</option>
+            ) : (
+              filteredPlayers.map((player) => (
+                <option key={player.id} value={player.id}>
+                  {player.name}
+                  {player.archived ? " (Archived)" : ""}
+                </option>
+              ))
+            )}
           </select>
         </label>
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { styles } from "@/lib/styles";
-import { Player, PlayerStats } from "@/types/golf";
+import { Player, PlayerStats, Round } from "@/types/golf";
 
 type ParentTabProps = {
   players: Player[];
@@ -14,6 +14,22 @@ type ParentTabProps = {
   setParentNotesDraft: React.Dispatch<React.SetStateAction<string>>;
   saveParentNotes: () => Promise<void>;
 };
+
+function getLatestRound(rounds: Round[]) {
+  return rounds.length > 0 ? rounds[0] : null;
+}
+
+function getBestRound(rounds: Round[]) {
+  if (rounds.length === 0) return null;
+  return rounds.reduce((best, current) =>
+    current.score < best.score ? current : best
+  );
+}
+
+function getScoreChangeFromPrevious(rounds: Round[]) {
+  if (rounds.length < 2) return null;
+  return rounds[0].score - rounds[1].score;
+}
 
 export default function ParentTab({
   players,
@@ -36,7 +52,10 @@ export default function ParentTab({
   }, [players, playerSearch]);
 
   useEffect(() => {
-    if (filteredPlayers.length === 1 && filteredPlayers[0].id !== selectedPlayerId) {
+    if (
+      filteredPlayers.length === 1 &&
+      filteredPlayers[0].id !== selectedPlayerId
+    ) {
       setSelectedPlayerId(filteredPlayers[0].id);
     }
   }, [filteredPlayers, selectedPlayerId, setSelectedPlayerId]);
@@ -46,6 +65,10 @@ export default function ParentTab({
   )
     ? selectedPlayerId
     : filteredPlayers[0]?.id ?? "";
+
+  const latestRound = getLatestRound(selectedPlayer.rounds);
+  const bestRound = getBestRound(selectedPlayer.rounds);
+  const scoreChange = getScoreChangeFromPrevious(selectedPlayer.rounds);
 
   return (
     <section style={styles.section}>
@@ -102,6 +125,62 @@ export default function ParentTab({
           Focus This Week:{" "}
           <strong>{selectedPlayerStats?.focusArea ?? "No data yet"}</strong>
         </p>
+      </div>
+
+      <div style={styles.card}>
+        <h3>Latest Round Summary</h3>
+        {latestRound ? (
+          <>
+            <div style={styles.infoGrid}>
+              <p>Date: {latestRound.date}</p>
+              <p>Score: {latestRound.score}</p>
+              <p>Penalties: {latestRound.penalties}</p>
+              <p>3-Putts: {latestRound.threePutts}</p>
+              <p>Doubles: {latestRound.doubles}</p>
+              <p>
+                Change From Previous:{" "}
+                {scoreChange === null
+                  ? "Not enough data"
+                  : scoreChange < 0
+                  ? `${Math.abs(scoreChange)} better`
+                  : scoreChange > 0
+                  ? `${scoreChange} worse`
+                  : "No change"}
+              </p>
+            </div>
+            <p>
+              Notes:{" "}
+              {latestRound.notes && latestRound.notes.trim().length > 0
+                ? latestRound.notes
+                : "None"}
+            </p>
+          </>
+        ) : (
+          <p>No rounds recorded yet.</p>
+        )}
+      </div>
+
+      <div style={styles.card}>
+        <h3>Best Round Summary</h3>
+        {bestRound ? (
+          <>
+            <div style={styles.infoGrid}>
+              <p>Date: {bestRound.date}</p>
+              <p>Score: {bestRound.score}</p>
+              <p>Penalties: {bestRound.penalties}</p>
+              <p>3-Putts: {bestRound.threePutts}</p>
+              <p>Doubles: {bestRound.doubles}</p>
+            </div>
+            <p>
+              Notes:{" "}
+              {bestRound.notes && bestRound.notes.trim().length > 0
+                ? bestRound.notes
+                : "None"}
+            </p>
+          </>
+        ) : (
+          <p>No rounds recorded yet.</p>
+        )}
       </div>
 
       <div style={styles.card}>

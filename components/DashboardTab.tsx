@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { styles } from "@/lib/styles";
-import { Player, PlayerStats } from "@/types/golf";
+import { Player, PlayerStats, Round } from "@/types/golf";
 
 type DashboardEntry = {
   player: Player;
@@ -34,6 +34,22 @@ type DashboardTabProps = {
   dashboardPlayers: DashboardEntry[];
   showArchivedPlayers: boolean;
 };
+
+function getLatestRound(rounds: Round[]) {
+  return rounds.length > 0 ? rounds[0] : null;
+}
+
+function getBestRound(rounds: Round[]) {
+  if (rounds.length === 0) return null;
+  return rounds.reduce((best, current) =>
+    current.score < best.score ? current : best
+  );
+}
+
+function getScoreChangeFromPrevious(rounds: Round[]) {
+  if (rounds.length < 2) return null;
+  return rounds[0].score - rounds[1].score;
+}
 
 export default function DashboardTab({
   players,
@@ -215,34 +231,76 @@ export default function DashboardTab({
         {filteredAndSortedPlayers.length === 0 ? (
           <p>No players match the current dashboard filters.</p>
         ) : (
-          filteredAndSortedPlayers.map(({ player, stats }) => (
-            <div key={player.id} style={styles.roundCard}>
-              <div style={styles.rowBetween}>
-                <div style={styles.fieldRow}>
-                  <h3 style={{ margin: 0 }}>{player.name}</h3>
-                  {player.archived ? (
-                    <span style={styles.archivedBadge}>Archived</span>
-                  ) : null}
+          filteredAndSortedPlayers.map(({ player, stats }) => {
+            const latestRound = getLatestRound(player.rounds);
+            const bestRoundDetail = getBestRound(player.rounds);
+            const scoreChange = getScoreChangeFromPrevious(player.rounds);
+
+            return (
+              <div key={player.id} style={styles.roundCard}>
+                <div style={styles.rowBetween}>
+                  <div style={styles.fieldRow}>
+                    <h3 style={{ margin: 0 }}>{player.name}</h3>
+                    {player.archived ? (
+                      <span style={styles.archivedBadge}>Archived</span>
+                    ) : null}
+                  </div>
+                  <span style={styles.badge}>{stats.trend}</span>
                 </div>
-                <span style={styles.badge}>{stats.trend}</span>
-              </div>
 
-              <div style={styles.infoGrid}>
-                <p>Rounds Logged: {stats.roundsLogged}</p>
-                <p>Free Throw Club: {player.freeThrowClub}</p>
-                <p>Average Score: {stats.averageScore}</p>
-                <p>Recent 3-Round Avg: {stats.recentAverageScore}</p>
-                <p>Best Round: {stats.bestRound}</p>
-                <p>Avg Penalties: {stats.averagePenalties}</p>
-                <p>Avg 3-Putts: {stats.averageThreePutts}</p>
-                <p>Avg Doubles: {stats.averageDoubles}</p>
-              </div>
+                <div style={styles.infoGrid}>
+                  <p>Rounds Logged: {stats.roundsLogged}</p>
+                  <p>Free Throw Club: {player.freeThrowClub}</p>
+                  <p>Average Score: {stats.averageScore}</p>
+                  <p>Recent 3-Round Avg: {stats.recentAverageScore}</p>
+                  <p>Best Round Score: {stats.bestRound}</p>
+                  <p>Avg Penalties: {stats.averagePenalties}</p>
+                  <p>Avg 3-Putts: {stats.averageThreePutts}</p>
+                  <p>Avg Doubles: {stats.averageDoubles}</p>
+                </div>
 
-              <p style={styles.focusText}>
-                Focus Area: <strong>{stats.focusArea}</strong>
-              </p>
-            </div>
-          ))
+                <div style={styles.infoGrid}>
+                  <p>
+                    Latest Round:{" "}
+                    {latestRound
+                      ? `${latestRound.date} (${latestRound.score})`
+                      : "No rounds yet"}
+                  </p>
+                  <p>
+                    Best Round:{" "}
+                    {bestRoundDetail
+                      ? `${bestRoundDetail.date} (${bestRoundDetail.score})`
+                      : "No rounds yet"}
+                  </p>
+                  <p>
+                    Score Change:{" "}
+                    {scoreChange === null
+                      ? "Not enough data"
+                      : scoreChange < 0
+                      ? `${Math.abs(scoreChange)} better`
+                      : scoreChange > 0
+                      ? `${scoreChange} worse`
+                      : "No change"}
+                  </p>
+                </div>
+
+                {latestRound ? (
+                  <p style={styles.focusText}>
+                    Latest Round Notes:{" "}
+                    <strong>
+                      {latestRound.notes && latestRound.notes.trim().length > 0
+                        ? latestRound.notes
+                        : "None"}
+                    </strong>
+                  </p>
+                ) : null}
+
+                <p style={styles.focusText}>
+                  Focus Area: <strong>{stats.focusArea}</strong>
+                </p>
+              </div>
+            );
+          })
         )}
       </div>
     </section>

@@ -49,9 +49,17 @@ export default function DashboardTab({
   const [sortKey, setSortKey] = useState<SortKey>("averageScore");
   const [sortAscending, setSortAscending] = useState(true);
   const [hidePlayersWithNoRounds, setHidePlayersWithNoRounds] = useState(false);
+  const [playerSearch, setPlayerSearch] = useState("");
 
   const filteredAndSortedPlayers = useMemo(() => {
     let result = [...dashboardPlayers];
+
+    const query = playerSearch.trim().toLowerCase();
+    if (query) {
+      result = result.filter((entry) =>
+        entry.player.name.toLowerCase().includes(query)
+      );
+    }
 
     if (hidePlayersWithNoRounds) {
       result = result.filter((entry) => entry.stats.roundsLogged > 0);
@@ -74,7 +82,13 @@ export default function DashboardTab({
     });
 
     return result;
-  }, [dashboardPlayers, hidePlayersWithNoRounds, sortAscending, sortKey]);
+  }, [
+    dashboardPlayers,
+    hidePlayersWithNoRounds,
+    sortAscending,
+    sortKey,
+    playerSearch,
+  ]);
 
   return (
     <section style={styles.section}>
@@ -144,6 +158,16 @@ export default function DashboardTab({
             </p>
           </div>
         </div>
+
+        <label style={styles.field}>
+          <span>Search Player</span>
+          <input
+            value={playerSearch}
+            onChange={(e) => setPlayerSearch(e.target.value)}
+            placeholder="Type a player name..."
+            style={styles.input}
+          />
+        </label>
 
         <div style={styles.infoGrid}>
           <label style={styles.field}>

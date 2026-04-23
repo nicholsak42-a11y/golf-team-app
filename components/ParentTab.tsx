@@ -29,9 +29,7 @@ export default function ParentTab({
 
   const filteredPlayers = useMemo(() => {
     const query = playerSearch.trim().toLowerCase();
-
     if (!query) return players;
-
     return players.filter((player) =>
       player.name.toLowerCase().includes(query)
     );
